@@ -1,0 +1,86 @@
+mkdir -p obj_os
+mkdir -p exe
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../cc_pal.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/cc_pal.o ../cc_pal.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/cc_pal.o ../cc_pal.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/device.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/device.o ../source/device.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/device.o ../source/device.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/driver.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/driver.o ../source/driver.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/driver.o ../source/driver.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/flowcont.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/flowcont.o ../source/flowcont.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/flowcont.o ../source/flowcont.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/netapp.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/netapp.o ../source/netapp.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/netapp.o ../source/netapp.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/netcfg.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/netcfg.o ../source/netcfg.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/netcfg.o ../source/netcfg.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/nonos.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/nonos.o ../source/nonos.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/nonos.o ../source/nonos.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/fs.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/fs.o ../source/fs.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/fs.o ../source/fs.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/socket.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/socket.o ../source/socket.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/socket.o ../source/socket.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/spawn.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/spawn.o ../source/spawn.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/spawn.o ../source/spawn.c
+if [ 'x' = x ];                            \
+ then                                                 \
+     echo "  CC    ../source/wlan.c";                             \
+ else                                                 \
+     echo arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/wlan.o ../source/wlan.c; \
+ fi
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m4  -ffunction-sections -fdata-sections -MD -std=c99 -g -O0 -c                    -I.. -I../.. -I../include -I../source -I../../oslib -I../../driverlib -I../../inc -DSL_PLATFORM_MULTI_THREADED -DSL_FULL -Dgcc -o obj_os/wlan.o ../source/wlan.c
+if [ 'x' = x ];     \
+ then                          \
+     echo "  AR    exe/libsimplelink.a";      \
+ else                          \
+     echo arm-none-eabi-ar -cr exe/libsimplelink.a obj_os/cc_pal.o obj_os/device.o obj_os/driver.o obj_os/flowcont.o obj_os/netapp.o obj_os/netcfg.o obj_os/nonos.o obj_os/fs.o obj_os/socket.o obj_os/spawn.o obj_os/wlan.o; \
+ fi
+arm-none-eabi-ar -cr exe/libsimplelink.a obj_os/cc_pal.o obj_os/device.o obj_os/driver.o obj_os/flowcont.o obj_os/netapp.o obj_os/netcfg.o obj_os/nonos.o obj_os/fs.o obj_os/socket.o obj_os/spawn.o obj_os/wlan.o
