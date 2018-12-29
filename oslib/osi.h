@@ -47,6 +47,13 @@ extern "C" {
 
 #define OSI_NO_WAIT        			(0)
 
+#ifndef SPAWN_TASK_STACK
+#define STACK_LEN          (2048) /*Stack Size*/
+#else
+#define STACK_LEN          (SPAWN_TASK_STACK)
+#endif
+
+
 typedef enum
 {
   OSI_OK = 0,
@@ -110,7 +117,7 @@ typedef void * OsiLockObj_t;
 
 	\note	The stack size of the execution thread must be at least of TBD bytes!
 */
-typedef void (*P_OSI_SPAWN_ENTRY)(void* pValue);
+typedef short (*P_OSI_SPAWN_ENTRY)(void* pValue);
 
 typedef void (*P_OSI_EVENT_HANDLER)(void* pValue);
 

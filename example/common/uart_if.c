@@ -51,6 +51,10 @@
 #include "rom.h"
 #include "rom_map.h"
 
+#if defined(USE_FREERTOS) || defined(USE_TI_RTOS)
+#include "osi.h"
+#endif
+
 #include "uart_if.h"
 
 #define IS_SPACE(x)       (x == 32 ? 1 : 0)
@@ -170,7 +174,13 @@ GetCmd(char *pcBuffer, unsigned int uiBufLen)
     //
     // Wait to receive a character over UART
     //
-    cChar = MAP_UARTCharGet(CONSOLE);
+    while(MAP_UARTCharsAvail(CONSOLE) == false)
+    {
+#if defined(USE_FREERTOS) || defined(USE_TI_RTOS)
+    	osi_Sleep(1);
+#endif
+    }
+    cChar = MAP_UARTCharGetNonBlocking(CONSOLE);
     
     //
     // Echo the received character
@@ -212,8 +222,13 @@ GetCmd(char *pcBuffer, unsigned int uiBufLen)
         //
         // Wait to receive a character over UART
         //
-        cChar = MAP_UARTCharGet(CONSOLE);
-        
+        while(MAP_UARTCharsAvail(CONSOLE) == false)
+        {
+#if defined(USE_FREERTOS) || defined(USE_TI_RTOS)
+        	osi_Sleep(1);
+#endif
+        }
+        cChar = MAP_UARTCharGetNonBlocking(CONSOLE);
         //
         // Echo the received character
         //

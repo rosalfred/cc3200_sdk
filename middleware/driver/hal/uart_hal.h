@@ -33,8 +33,8 @@
 //
 //*****************************************************************************
 
-#ifndef UART_DRIVER_H_INCLUDED
-#define UART_DRIVER_H_INCLUDED
+#ifndef UART_HAL_H__
+#define UART_HAL_H__
 
 #include "cc_types.h"
 #include "stdint.h"
@@ -118,6 +118,9 @@ struct cc_uart_config{
 		enum cc_fifo_trig_level rx_fifo_trig_level;
 		enum cc_fifo_trig_level tx_fifo_trig_level;
 		enum cc_boolean fifo_enabled;
+
+		/* echo feature */
+		enum cc_boolean echo_enabled;
         u8 irqvec_id;                  /* Interrupt vector number */
 
         void *rtos_hndl;               /* Reference to RTOS driver object */ 

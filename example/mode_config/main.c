@@ -81,7 +81,7 @@
 #define ERR_PRINT(x) Report("Error [%d] at line [%d] in function [%s]  \n\r",x,__LINE__,__FUNCTION__)
 #endif
 
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 #define FOREVER                 1
 #define APP_NAME                "Mode Switch"
 #define SL_STOP_TIMEOUT         200
@@ -106,7 +106,7 @@
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
 unsigned short g_usConnectionStatus = 0;
-unsigned short g_usIpObtained = 0;
+volatile unsigned short g_usIpObtained = 0;
 
 #if defined(ccs)
 extern void (* const g_pfnVectors[])(void);
@@ -132,6 +132,31 @@ static void BoardInit();
 /****************************************************************************/
 /*                      LOCAL FUNCTION DEFINITIONS                          */
 /****************************************************************************/
+//*****************************************************************************
+//
+//! \brief This function handles General Events
+//!
+//! \param[in]     pDevEvent - Pointer to General Event Info
+//!
+//! \return None
+//!
+//*****************************************************************************
+void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
+{
+    if(!pDevEvent)
+    {
+        return;
+    }
+
+    //
+    // Most of the general errors are not FATAL are are to be handled
+    // appropriately by the application
+    //
+    UART_PRINT("[GENERAL EVENT] - ID=[%d] Sender=[%d]\n\n",
+               pDevEvent->EventData.deviceEvent.status,
+               pDevEvent->EventData.deviceEvent.sender);
+}
+
 //****************************************************************************
 //
 //!    \brief                         None
@@ -208,6 +233,7 @@ void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pSlHttpServerEvent,
                                 SlHttpServerResponse_t *pSlHttpServerResponse)
 {
 }
+
 
 //****************************************************************************
 //

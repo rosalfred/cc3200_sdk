@@ -97,6 +97,8 @@ i32 cc_rtc_set(struct u64_time *rtc_val);
 */
 void cc_rtc_isr();
 
+i32 cc_rtc_fast_read_config(bool enable);
+
 i32 cc_rtc_init(const struct hw_timer_cfg *cfg);
 
 #endif

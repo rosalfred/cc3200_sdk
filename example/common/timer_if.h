@@ -54,7 +54,8 @@ extern "C"
 /****************************************************************************/
 /*								MACROS										*/
 /****************************************************************************/
-#define PERIODIC_TEST_CYCLES    80000000
+#define SYS_CLK				    80000000
+#define MILLISECONDS_TO_TICKS(ms)   ((SYS_CLK/1000) * (ms))
 #define PERIODIC_TEST_LOOPS     5
 
 extern void Timer_IF_Init( unsigned long ePeripheralc, unsigned long ulBase,

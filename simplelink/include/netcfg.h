@@ -1,7 +1,7 @@
 /*
  * netcfg.h - CC31xx/CC32xx Host Driver Implementation
  *
- * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/ 
+ * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/ 
  * 
  * 
  *  Redistribution and use in source and binary forms, with or without 
@@ -33,14 +33,16 @@
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
 */
-    
-#ifndef __NETCFG_H__
-#define __NETCFG_H__
 
 /*****************************************************************************/
 /* Include files                                                             */
 /*****************************************************************************/
 #include "simplelink.h"
+
+    
+#ifndef __NETCFG_H__
+#define __NETCFG_H__
+
 
 #ifdef    __cplusplus
 extern "C" {
@@ -80,6 +82,9 @@ typedef enum
     SL_IPV4_AP_P2P_GO_GET_INFO            = 6,
     SL_IPV4_AP_P2P_GO_STATIC_ENABLE       = 7,
     SL_SET_HOST_RX_AGGR                   = 8,
+	SL_IPV4_DHCP_CLIENT                   = 9,
+ 	SL_IPV4_DNS_CLIENT                    = 10,
+ 	SL_IPV4_ARP_FLUSH                     = 11,
     MAX_SETTINGS = 0xFF
 }Sl_NetCfg_e;
 
@@ -92,6 +97,33 @@ typedef struct
     _u32  ipV4DnsServer;
 }SlNetCfgIpV4Args_t;
 
+typedef struct
+{    
+    _u32  Ip;
+    _u32  Gateway;
+    _u32  Mask;
+    _u32  Dns[2];
+    _u32  DhcpServer;
+    _u32  LeaseTime;
+    _u8   DhcpState;
+    _u8   Reserved[3];
+}SlNetCfgIpV4DhcpClientArgs_t;
+
+typedef enum
+{
+  SL_NETCFG_DHCP_CLIENT_UNKNOWN = 0,
+  SL_NETCFG_DHCP_CLIENT_DISABLED,
+  SL_NETCFG_DHCP_CLIENT_ENABLED,
+  SL_NETCFG_DHCP_CLIENT_BOUND,
+  SL_NETCFG_DHCP_CLIENT_RENEW,
+  SL_NETCFG_DHCP_CLIENT_REBIND
+}SlNetCfgIpv4DhcpClientState_e;
+
+typedef struct
+{    
+  _u32 DnsSecondServerAddr;
+  _u32 DnsMaxRetries;
+}SlNetCfgIpV4DnsClientArgs_t;
 
 /*****************************************************************************/
 /* Function prototypes                                                       */
@@ -179,10 +211,38 @@ typedef struct
         sl_Start(NULL,NULL,NULL);
     \endcode
 
+   \code       
+        SL_IPV4_DNS_CLIENT:
+
+		Set DNS max retries (range 5-32, default 32 retries) and secondary DNS address (DHCP and static configuration)  
+			changes not saved on the internal flash.
+                                                                     
+		_i32 Status;
+		 SlNetCfgIpV4DnsClientArgs_t DnsOpt;
+		DnsOpt.DnsSecondServerAddr  =  SL_IPV4_VAL(8,8,8,8); ;
+		DnsOpt.DnsMaxRetries        =  12;
+ 		Status = sl_NetCfgSet(SL_IPV4_DNS_CLIENT,0,sizeof(SlNetCfgIpV4DnsClientArgs_t),(unsigned char *)&DnsOpt);
+		if( Status )
+		{
+			// error 
+		}
+    \endcode
+    \code       
+        SL_IPV4_ARP_FLUSH:
+
+		Flush ARP table
+                                                                     
+		 _i32 Status;
+		 Status = sl_NetCfgSet(SL_IPV4_ARP_FLUSH,0,0,NULL);
+		 if( Status )
+ 		 {
+			// 
+		 }
+    \endcode
    
 */
 #if _SL_INCLUDE_FUNC(sl_NetCfgSet)
-_i32 sl_NetCfgSet(_u8 ConfigId ,_u8 ConfigOpt, _u8 ConfigLen, _u8 *pValues);
+_i32 sl_NetCfgSet(const _u8 ConfigId,const _u8 ConfigOpt,const _u8 ConfigLen,const _u8 *pValues);
 #endif
 
 
@@ -259,10 +319,42 @@ _i32 sl_NetCfgSet(_u8 ConfigId ,_u8 ConfigOpt, _u8 ConfigLen, _u8 *pValues);
 
     \endcode
 
+    \code       
+
+        SL_IPV4_DHCP_CLIENT:
+       
+        Get DHCP client inforamtion, when DhcpState is SL_NETCFG_DHCP_CLIENT_BOUND,  SL_NETCFG_DHCP_CLIENT_RENEW or SL_NETCFG_DHCP_CLIENT_REBIND, dhcp inforamtion is not zeroed
+
+		_u8 ConfigOpt = 0, ConfigLen = sizeof(SlNetCfgIpV4DhcpClientArgs_t);
+	    _i32 Status;
+	    SlNetCfgIpV4DhcpClientArgs_t Dhcp;
+	    Status = sl_NetCfgGet(SL_IPV4_DHCP_CLIENT,&ConfigOpt,&ConfigLen,(_u8 *)&Dhcp);
+	    if( Status )
+	    {
+		  // error
+	    }
+    \endcode
+  
+    \code       
+        SL_IPV4_DNS_CLIENT:
+
+		Get DNS max retries and secondary DNS address (DHCP and static configuration)  
+                                                                     
+	 	_u8 ConfigOpt;
+		_i32 Status;
+		_u8 pConfigLen = sizeof(SlNetCfgIpV4DnsClientArgs_t);
+		SlNetCfgIpV4DnsClientArgs_t DnsOpt;
+		Status = sl_NetCfgGet(SL_IPV4_DNS_CLIENT,&ConfigOpt,&pConfigLen,&DnsOpt);
+		if( Status )
+		{
+			// error 
+		}
+    \endcode
+
    
 */
 #if _SL_INCLUDE_FUNC(sl_NetCfgGet)
-_i32 sl_NetCfgGet(_u8 ConfigId ,_u8 *pConfigOpt, _u8 *pConfigLen, _u8 *pValues);
+_i32 sl_NetCfgGet(const _u8 ConfigId ,_u8 *pConfigOpt, _u8 *pConfigLen, _u8 *pValues);
 #endif
 
 /*!

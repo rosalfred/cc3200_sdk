@@ -81,7 +81,7 @@
 
 #include "pinmux.h"
 
-#define APPLICATION_VERSION  "1.1.0"
+#define APPLICATION_VERSION  "1.1.1"
 #define APP_NAME             "Interrupt Reference"
 #define SYSCLK               80000000
 #define UART_PRINT           Report

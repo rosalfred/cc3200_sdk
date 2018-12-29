@@ -82,7 +82,7 @@
 #include "wdt_if.h"
 #include "pinmux.h"
 
-#define APPLICATION_VERSION          "1.1.0"
+#define APPLICATION_VERSION          "1.1.1"
 #define WD_PERIOD_MS                 1000
 #define MAP_SysCtlClockGet           80000000
 #define LED_GPIO                     MCU_RED_LED_GPIO    /* RED LED */

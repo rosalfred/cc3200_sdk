@@ -119,10 +119,14 @@ void Button_IF_Init(P_INT_HANDLER S2InterruptHdl,P_INT_HANDLER S3InterruptHdl )
         //
         // Register Interrupt handler
         //
-#ifdef SL_PLATFORM_MULTI_THREADED  /* If OS-based application */    
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED) 
+    // USE_TIRTOS: if app uses TI-RTOS (either networking/non-networking)
+    // USE_FREERTOS: if app uses Free-RTOS (either networking/non-networking)
+    // SL_PLATFORM_MULTI_THREADED: if app uses any OS + networking(simplelink)
         osi_InterruptRegister(INT_GPIOA1,(P_OSI_INTR_ENTRY)GPIOs3IntHandler, \
                                 INT_PRIORITY_LVL_1);
-#else                            
+#else                   
+		MAP_IntPrioritySet(INT_GPIOA1, INT_PRIORITY_LVL_1);
         MAP_GPIOIntRegister(GPIOA1_BASE, GPIOs3IntHandler);
 #endif    
         //
@@ -144,10 +148,14 @@ void Button_IF_Init(P_INT_HANDLER S2InterruptHdl,P_INT_HANDLER S3InterruptHdl )
         //
         // Register Interrupt handler
         //
-#ifdef SL_PLATFORM_MULTI_THREADED  /* If OS-based application */    
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED) 
+    // USE_TIRTOS: if app uses TI-RTOS (either networking/non-networking)
+    // USE_FREERTOS: if app uses Free-RTOS (either networking/non-networking)
+    // SL_PLATFORM_MULTI_THREADED: if app uses any OS + networking(simplelink)
         osi_InterruptRegister(INT_GPIOA2,(P_OSI_INTR_ENTRY)GPIOs2IntHandler, \
                                 INT_PRIORITY_LVL_1);
-#else                            
+#else                
+		MAP_IntPrioritySet(INT_GPIOA2, INT_PRIORITY_LVL_1);
         MAP_GPIOIntRegister(GPIOA2_BASE, GPIOs2IntHandler);
 #endif    
                             

@@ -171,7 +171,7 @@ void cc_dma_exit();
 
 /* 
    Allocate a DMA channel. User ID and Channel ID should be commensurate with
-   hardware connection. Refer to CC3101 datasheet for details. 
+   hardware connection. Refer to CC3200 datasheet for details. 
 
    Returns a valid handle on success otherwise NULL
 */

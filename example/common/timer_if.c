@@ -48,7 +48,7 @@
 #include "prcm.h"
 
 // TI-RTOS includes
-#ifdef USE_TIRTOS
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED)
 #include <stdlib.h>
 #include "osi.h"
 #endif
@@ -56,7 +56,6 @@
 #include "timer_if.h"
 
 
-#ifdef USE_TIRTOS
 static unsigned char
 GetPeripheralIntNum(unsigned long ulBase, unsigned long ulTimer)
 {
@@ -98,7 +97,6 @@ GetPeripheralIntNum(unsigned long ulBase, unsigned long ulTimer)
     }
 
 }
-#endif
 
 //*****************************************************************************
 //
@@ -152,9 +150,10 @@ void Timer_IF_IntSetup(unsigned long ulBase, unsigned long ulTimer,
   //
   // Setup the interrupts for the timer timeouts.
   //
-#ifdef USE_TIRTOS
-      // In case application uses TI-RTOS then use OSI APIs to register
-      // the interrupts
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED) 
+    // USE_TIRTOS: if app uses TI-RTOS (either networking/non-networking)
+    // USE_FREERTOS: if app uses Free-RTOS (either networking/non-networking)
+    // SL_PLATFORM_MULTI_THREADED: if app uses any OS + networking(simplelink)
       if(ulTimer == TIMER_BOTH)
       {
           osi_InterruptRegister(GetPeripheralIntNum(ulBase, TIMER_A),
@@ -169,6 +168,7 @@ void Timer_IF_IntSetup(unsigned long ulBase, unsigned long ulTimer,
       }
         
 #else
+	  MAP_IntPrioritySet(GetPeripheralIntNum(ulBase, ulTimer), INT_PRIORITY_LVL_1);
       MAP_TimerIntRegister(ulBase, ulTimer, TimerBaseIntHandler);
 #endif
  
@@ -212,20 +212,22 @@ void Timer_IF_InterruptClear(unsigned long ulBase)
 //!
 //! \param ulBase is the base address for the timer.
 //! \param ulTimer selects amoung the TIMER_A or TIMER_B or TIMER_BOTH.
-//! \param ulValue is the the number of clock cycles after which the timer will
-//! run out and gives the interrupt.
+//! \param ulValue is the time delay in mSec after that run out, 
+//!                 timer gives an interrupt.
 //!
 //! This function
 //!     1. Load the Timer with the specified value.
 //!     2. enables the timer.
 //!
 //! \return none
+//!
+//! \Note- HW Timer runs on 80MHz clock 
 //
 //*****************************************************************************
 void Timer_IF_Start(unsigned long ulBase, unsigned long ulTimer, 
                 unsigned long ulValue)
 {
-    MAP_TimerLoadSet(ulBase,ulTimer,ulValue);
+    MAP_TimerLoadSet(ulBase,ulTimer,MILLISECONDS_TO_TICKS(ulValue));
     //
     // Enable the GPT 
     //
@@ -285,8 +287,7 @@ void Timer_IF_DeInit(unsigned long ulBase,unsigned long ulTimer)
 //!
 //! \param ulBase is the base address for the timer.
 //! \param ulTimer selects between the TIMER A and TIMER B.
-//! \param ulValue is the the number of clock cycles after which the timer will
-//! run out and gives the interrupt.
+//! \param ulValue is timer reload value (mSec) after which the timer will run out and gives an interrupt.
 //!
 //! This function
 //!     1. Reload the Timer with the specified value.
@@ -297,7 +298,7 @@ void Timer_IF_DeInit(unsigned long ulBase,unsigned long ulTimer)
 void Timer_IF_ReLoad(unsigned long ulBase, unsigned long ulTimer, 
                 unsigned long ulValue)
 {
-    MAP_TimerLoadSet(ulBase,ulTimer,ulValue);
+    MAP_TimerLoadSet(ulBase,ulTimer,MILLISECONDS_TO_TICKS(ulValue));
 }
 
 //*****************************************************************************

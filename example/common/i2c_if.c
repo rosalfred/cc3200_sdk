@@ -46,7 +46,6 @@
 #include "hw_memmap.h"
 #include "hw_ints.h"
 #include "hw_i2c.h"
-#include "hwspinlock.h"
 #include "i2c.h"
 #include "pin.h"
 #include "rom.h"
@@ -145,7 +144,7 @@ I2CTransact(unsigned long ulCmd)
 //
 //! Invokes the I2C driver APIs to write to the specified address
 //!
-//! \param ucDevAddr is the device I2C slave address
+//! \param ucDevAddr is the 7-bit I2C slave address
 //! \param pucData is the pointer to the data to be written
 //! \param ucLen is the length of data to be written
 //! \param ucStop determines if the transaction is followed by stop bit
@@ -219,7 +218,7 @@ I2C_IF_Write(unsigned char ucDevAddr,
 //! Invokes the I2C driver APIs to read from the device. This assumes the 
 //! device local address to read from is set using the I2CWrite API.
 //!
-//! \param ucDevAddr is the device I2C slave address
+//! \param ucDevAddr is the 7-bit I2C slave address
 //! \param pucData is the pointer to the read data to be placed
 //! \param ucLen is the length of data to be read
 //! 
@@ -313,7 +312,7 @@ I2C_IF_Read(unsigned char ucDevAddr,
 //! This assumes the device local address to be of 8-bit. For other 
 //! combinations use I2CWrite followed by I2CRead.
 //!
-//! \param ucDevAddr is the device I2C slave address
+//! \param ucDevAddr is the 7-bit I2C slave address
 //! \param pucWrDataBuf is the pointer to the data to be written (reg addr)
 //! \param ucWrLen is the length of data to be written
 //! \param pucRdDataBuf is the pointer to the read data to be placed

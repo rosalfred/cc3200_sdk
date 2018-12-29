@@ -1,7 +1,7 @@
 /*
  * flowcont.h - CC31xx/CC32xx Host Driver Implementation
  *
- * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/ 
+ * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/ 
  * 
  * 
  *  Redistribution and use in source and binary forms, with or without 
@@ -47,11 +47,11 @@ extern "C" {
 /*****************************************************************************/
 #define FLOW_CONT_MIN 1
 
-/*****************************************************************************/
-/* Function prototypes                                                       */
-/*****************************************************************************/
+#if 0
 extern void _SlDrvFlowContInit(void);
 extern void _SlDrvFlowContDeinit(void);
+#endif
+
 
 #ifdef  __cplusplus
 }

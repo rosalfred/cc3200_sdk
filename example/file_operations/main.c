@@ -79,13 +79,11 @@
 
 
 #define APPLICATION_NAME        "FILE OPERATIONS"
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 
 #define SL_MAX_FILE_SIZE        64L*1024L       /* 64KB file */
 #define BUF_SIZE                2048
 #define USER_FILE_NAME          "fs_demo.txt"
-#define RED_LED_GPIO            9
-#define GREEN_LED_GPIO          11
 
 /* Application specific status/error codes */
 typedef enum{
@@ -229,6 +227,20 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
 
 //*****************************************************************************
 //
+//! \brief This function handles General Events
+//!
+//! \param[in]     pDevEvent - Pointer to General Event Info
+//!
+//! \return None
+//!
+//*****************************************************************************
+void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
+{
+
+}
+
+//*****************************************************************************
+//
 //! This function handles socket events indication
 //!
 //! \param[in]      pSock - Pointer to Socket Event Info
@@ -240,6 +252,7 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
 {
 
 }
+
 
 //*****************************************************************************
 // SimpleLink Asynchronous Event Handlers -- End

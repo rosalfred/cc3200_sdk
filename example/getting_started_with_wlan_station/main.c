@@ -86,7 +86,7 @@
 
 
 #define APPLICATION_NAME        "WLAN STATION"
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 
 #define HOST_NAME               "www.ti.com"
 
@@ -277,8 +277,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
             pEventData = &pWlanEvent->EventData.STAandP2PModeDisconnected;
 
             // If the user has initiated 'Disconnect' request, 
-            //'reason_code' is SL_USER_INITIATED_DISCONNECTION 
-            if(SL_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
+            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION 
+            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
             {
                 UART_PRINT("[WLAN EVENT]Device disconnected from the AP: %s,"
                 "BSSID: %x:%x:%x:%x:%x:%x on application's request \n\r",
@@ -414,23 +414,26 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
     switch( pSock->Event )
     {
         case SL_SOCKET_TX_FAILED_EVENT:
-            switch( pSock->EventData.status )
+            switch( pSock->socketAsyncEvent.SockTxFailData.status)
             {
                 case SL_ECLOSE: 
                     UART_PRINT("[SOCK ERROR] - close socket (%d) operation "
-                    "failed to transmit all queued packets\n\n", 
-                           pSock->EventData.sd);
+                                "failed to transmit all queued packets\n\n", 
+                                    pSock->socketAsyncEvent.SockTxFailData.sd);
                     break;
                 default: 
-                    UART_PRINT("[SOCK ERROR] - TX FAILED : socket %d , reason"
-                        "(%d) \n\n",
-                           pSock->EventData.sd, pSock->EventData.status);
+                    UART_PRINT("[SOCK ERROR] - TX FAILED  :  socket %d , reason "
+                                "(%d) \n\n",
+                                pSock->socketAsyncEvent.SockTxFailData.sd, pSock->socketAsyncEvent.SockTxFailData.status);
+                  break;
             }
             break;
 
         default:
-            UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
+        	UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
+          break;
     }
+
 }
 
 

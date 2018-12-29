@@ -81,7 +81,7 @@
 #include "pinmux.h"
 
 #define APP_NAME                "WLAN AP"
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 #define OSI_STACK_SIZE          2048
 
 
@@ -256,8 +256,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent)
             pEventData = &pSlWlanEvent->EventData.STAandP2PModeDisconnected;
 
             // If the user has initiated 'Disconnect' request,
-            //'reason_code' is SL_USER_INITIATED_DISCONNECTION
-            if(SL_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
+            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION
+            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
             {
                 UART_PRINT("Device disconnected from the AP on application's "
                             "request \n\r");
@@ -349,7 +349,7 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
         {
             CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_LEASED);
 
-            UART_PRINT("[NETAPP EVENT] IP Leased to Client: IP=%d.%d.%d.%d , ",
+            UART_PRINT("[NETAPP EVENT] IP Released for Client: IP=%d.%d.%d.%d , ",
                         SL_IPV4_BYTE(g_ulStaIp,3), SL_IPV4_BYTE(g_ulStaIp,2),
                         SL_IPV4_BYTE(g_ulStaIp,1), SL_IPV4_BYTE(g_ulStaIp,0));
 
@@ -418,26 +418,29 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
     //
     // This application doesn't work w/ socket - Events are not expected
     //
-       switch( pSock->Event )
+    switch( pSock->Event )
     {
         case SL_SOCKET_TX_FAILED_EVENT:
-            switch( pSock->EventData.status )
+            switch( pSock->socketAsyncEvent.SockTxFailData.status)
             {
                 case SL_ECLOSE: 
                     UART_PRINT("[SOCK ERROR] - close socket (%d) operation "
                                 "failed to transmit all queued packets\n\n", 
-                                pSock->EventData.sd);
+                                    pSock->socketAsyncEvent.SockTxFailData.sd);
                     break;
                 default: 
-                    UART_PRINT("[SOCK ERROR] - TX FAILED : socket %d , reason"
+                    UART_PRINT("[SOCK ERROR] - TX FAILED  :  socket %d , reason "
                                 "(%d) \n\n",
-                                pSock->EventData.sd, pSock->EventData.status);
+                                pSock->socketAsyncEvent.SockTxFailData.sd, pSock->socketAsyncEvent.SockTxFailData.status);
+                  break;
             }
             break;
 
         default:
-          UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
+        	UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
+          break;
     }
+
 }
 
 //*****************************************************************************
@@ -454,7 +457,6 @@ void SimpleLinkPingReport(SlPingReport_t *pPingReport)
     SET_STATUS_BIT(g_ulStatus, STATUS_BIT_PING_DONE);
     g_ulPingPacketsRecv = pPingReport->PacketsReceived;
 }
-
 
 //*****************************************************************************
 // SimpleLink Asynchronous Event Handlers -- End
@@ -868,8 +870,7 @@ void WlanAPMode( void *pvParameters )
 
     // Switch off Network processor
     lRetVal = sl_Stop(SL_STOP_TIMEOUT);
-    
-    UART_PRINT("Application exits\n\r");
+    UART_PRINT("WLAN AP example executed successfully");
     while(1);
 }
 

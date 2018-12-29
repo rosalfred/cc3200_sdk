@@ -90,6 +90,11 @@
 			<type>1</type>
 			<locationURI>CC3200_SDK_ROOT/middleware/driver/hal/uart_hal.c</locationURI>
 		</link>
+		<link>
+			<name>util64.c</name>
+			<type>1</type>
+			<locationURI>CC3200_SDK_ROOT/middleware/driver/hal/util64.c</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

@@ -3,7 +3,7 @@
 <project>
   <fileVersion>2</fileVersion>
   <configuration>
-    <name>Debug</name>
+    <name>Release</name>
     <toolchain>
       <name>ARM</name>
     </toolchain>
@@ -14,7 +14,7 @@
       <data>
         <version>26</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>CInput</name>
           <state>1</state>
@@ -89,7 +89,7 @@
         </option>
         <option>
           <name>OCLastSavedByProductVersion</name>
-          <state>7.20.1.7306</state>
+          <state>7.20.2.7418</state>
         </option>
         <option>
           <name>OCDownloadAttachToProgram</name>
@@ -215,7 +215,7 @@
       <data>
         <version>1</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>OCSimDriverInfo</name>
           <state>1</state>
@@ -240,7 +240,7 @@
       <data>
         <version>0</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>CCAngelHeartbeat</name>
           <state>1</state>
@@ -283,7 +283,7 @@
       <data>
         <version>2</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>OCDriverInfo</name>
           <state>1</state>
@@ -454,7 +454,7 @@
       <data>
         <version>0</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>OCDriverInfo</name>
           <state>1</state>
@@ -491,7 +491,7 @@
       <data>
         <version>1</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>CRomLogFileCheck</name>
           <state>0</state>
@@ -726,7 +726,7 @@
       <data>
         <version>15</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>JLinkSpeed</name>
           <state>1000</state>
@@ -926,7 +926,7 @@
       <data>
         <version>2</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>OCDriverInfo</name>
           <state>1</state>
@@ -959,7 +959,7 @@
       <data>
         <version>3</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>jtag</name>
           <version>0</version>
@@ -1048,7 +1048,7 @@
       <data>
         <version>1</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>OCDriverInfo</name>
           <state>1</state>
@@ -1120,7 +1120,7 @@
       <data>
         <version>2</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>CRDIDriverDll</name>
           <state>###Uninitialized###</state>
@@ -1177,7 +1177,7 @@
       <data>
         <version>2</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>OCDriverInfo</name>
           <state>1</state>
@@ -1215,7 +1215,7 @@
       <data>
         <version>0</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>CThirdPartyDriverDll</name>
           <state>###Uninitialized###</state>
@@ -1240,7 +1240,7 @@
       <data>
         <version>2</version>
         <wantNonLocal>1</wantNonLocal>
-        <debug>1</debug>
+        <debug>0</debug>
         <option>
           <name>OCDriverInfo</name>
           <state>1</state>
@@ -1426,7 +1426,7 @@
         </option>
         <option>
           <name>OCProductVersion</name>
-          <state>7.20.1.7306</state>
+          <state>7.20.2.7418</state>
         </option>
         <option>
           <name>OCDynDriverList</name>

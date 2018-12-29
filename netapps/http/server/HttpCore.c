@@ -53,6 +53,7 @@
 
 
 OsiSyncObj_t        g_WaitSyncObj;
+extern long glFileHandle;
 
 #define OSI_DELAY(x)    osi_Sleep(x) 
 
@@ -173,7 +174,6 @@ static void HttpCore_InitWebServer();
 static int HttpCore_HandleRequestPacket(UINT16 uConnection, struct HttpBlob packet);
 static int HttpCore_HandleMethodLine(UINT16 uConnection, struct HttpBlob line);
 static int HttpCore_HandleHeaderLine(UINT16 uConnection, struct HttpBlob line);
-static int WSCore_HandshakeRequest(UINT16 uConnection, struct HttpBlob line);
 static int WSCore_HandshakeResponse (UINT16 uConnection, struct HttpBlob line);
 static int WS_HandshakeHash(char *InKey, char *OutKey, char *EncOutKey);
 static int HttpCore_HandleRequestData(UINT16 uConnection, struct HttpBlob* pData);
@@ -236,36 +236,38 @@ void RunHttpServer(void)
         HttpDebug("Http server socket %d \n\r", g_state.listenSocket);
       }
 
-      if((g_state.listenSocket >= 0) && 1/*(GetCC3101State() & CC3101_GOOD_TCP)*/)
-      {
-        if (g_state.uOpenConnections < HTTP_CORE_MAX_CONNECTIONS)
+        if(g_state.listenSocket >= 0)
         {
-          sock = CreateTCPClientSocket(g_state.listenSocket);//non blocking func
-          if(sock >= 0 )
-          {
-            for (uConnection = 0; uConnection < HTTP_CORE_MAX_CONNECTIONS; ++uConnection)
+            if (g_state.uOpenConnections < HTTP_CORE_MAX_CONNECTIONS)
             {
-              if (g_state.connections[uConnection].connectionState == Inactive)
-                break;
-						}
+                sock = CreateTCPClientSocket(g_state.listenSocket);//non blocking func
+                if(sock >= 0 )
+                {
+                    for (uConnection = 0; uConnection < HTTP_CORE_MAX_CONNECTIONS; ++uConnection)
+                    {
+                        if (g_state.connections[uConnection].connectionState == Inactive)
+                            break;
+                    }
+                    if(uConnection != HTTP_CORE_MAX_CONNECTIONS)
+                    {                     
+                        g_state.connections[uConnection].dataSocket = sock;
+                        g_state.uOpenConnections++;
+                        g_state.connections[uConnection].connectionState = RequestMethod;
+                        HttpDebug("Accepting new connection number %d \n\r", uConnection);
+                    }
+                }
+                else if((sock != SL_EAGAIN) && (sock != SL_POOL_IS_EMPTY) && (sock != SL_INEXE) && (sock != SL_ENSOCK))
+                {
+                    HttpDebug("\n Http server socket error %d\n\r",sock);
+                    HttpCloseServer();
+                }
+                else
+                {
+                    HttpDebug("Http accept retry %d\n\r",sock);
+                }
+            }
 
-            g_state.connections[uConnection].dataSocket = sock;
-            g_state.uOpenConnections++;
-            g_state.connections[uConnection].connectionState = RequestMethod;
-            HttpDebug("Accepting new connection number %d \n\r", uConnection);
-          }
-          else if((sock != SL_EAGAIN) && (sock != SL_POOL_IS_EMPTY) && (sock != SL_INEXE) && (sock != SL_ENSOCK))
-          {
-			HttpDebug("\n Http server socket error %d\n\r",sock);
-			HttpCloseServer();
-          }
-          else
-          {
-        	  HttpDebug("Http accept retry %d\n\r",sock);
-          }
-        }
-
-        if((g_state.uOpenConnections > 0) && 1 /*(GetCC3101State() & CC3101_GOOD_TCP)*/)
+        if((g_state.uOpenConnections > 0) && 1)
         {
 					for (uConnection = 0; uConnection < HTTP_CORE_MAX_CONNECTIONS; ++uConnection)
 					{
@@ -562,7 +564,7 @@ static int HttpCore_GetNextLine(UINT16 uConnection, struct HttpBlob* pCurrentLoc
  */
 static int HttpCore_HandleRequestPacket(UINT16 uConnection, struct HttpBlob packet)
 {
-    struct HttpBlob currentLocation, line;
+    struct HttpBlob currentLocation, line = {0, NULL};
     int ret;
 
     currentLocation.pData = packet.pData;
@@ -625,13 +627,10 @@ static int HttpCore_HandleRequestPacket(UINT16 uConnection, struct HttpBlob pack
                     return 0;
                 break;
             case RequestHeaders:
+            case WebSocketRequest:
                 if (!HttpCore_HandleHeaderLine(uConnection, line))
                     return 0;
                 break;
-			case WebSocketRequest:
-				if (!WSCore_HandshakeRequest(uConnection, line))
-					return 0;
-				break;
             case RequestData:
                 ret = HttpCore_HandleRequestData(uConnection, &currentLocation);
                 if (ret == 0)
@@ -793,37 +792,38 @@ static int HttpCore_HandleHeaderLine(UINT16 uConnection, struct HttpBlob line)
     struct HttpBlob blobValue;
     UINT8* pFound;
     UINT32 length;
+    UINT8 bRetVal = 1;
+    char *dataCopy = NULL;
+
+    // Take backup of header line as HttpString_nextToken API convert data to lowercase.
+    //	  App may later need original case-sensitive data. eg. in WS_KEY_REQUEST
+    dataCopy = (char *)malloc(strlen((const char *)line.pData));
+    memset(dataCopy,'\0',strlen((const char *)line.pData));
+    memcpy(dataCopy,(const char *)line.pData,strlen((const char *)line.pData));
 
     // NULL line is received when a header line is too long.
     if (line.pData == NULL)
-        return 1;
+    {
+    	bRetVal = 1;
+    	goto exit;
+    }
 
     // Length is 0, this means than End-Of-Headers marker was reached
-    // State of this connection is set to RequestData
     if (line.uLength == 0)
     {
-        g_state.connections[uConnection].connectionState = RequestData;
-        return 1;
-    }
-	
-	//Upgrade: websocket
-	//if(g_state.connections[uConnection].request.uFlags == (~HTTP_REQUEST_FLAG_METHOD_POST)|HTTP_REQUEST_1_1)
-	//{
-		if (HttpString_nextToken(WS_UPGRADE, sizeof(WS_UPGRADE)-1, line) == line.pData)
-    	{
-        line.pData += sizeof(WS_UPGRADE)-1 + 1;
-        line.uLength -= sizeof(WS_UPGRADE)-1 + 1;
-        pFound = HttpString_nextToken(WS_WEBSOCKET, sizeof(WS_WEBSOCKET)-1, line);
-        if (pFound != NULL)
-        {
-			g_state.connections[uConnection].connectionState = WebSocketRequest;
-			return 1;
-        }
-        else
-        	return 0;
+    	if(g_state.connections[uConnection].connectionState == WebSocketRequest)
+    	{	//State of this connection is set to WebSocketResponse
+    		g_state.connections[uConnection].connectionState = WebSocketResponse;
+
     	}
-	//}
-	
+    	else
+    	{	//State of this connection is set to RequestData
+    		g_state.connections[uConnection].connectionState = RequestData;
+    	}
+    	bRetVal = 1;
+    	goto exit;
+    }
+
     // If "Accept-encoding" header then set or clear HTTP_REQUEST_FLAG_ACCEPT_GZIP flag
     if (HttpString_nextToken(HTTP_ACCEPT_ENCODING, sizeof(HTTP_ACCEPT_ENCODING)-1, line) == line.pData)
     {
@@ -834,7 +834,9 @@ static int HttpCore_HandleHeaderLine(UINT16 uConnection, struct HttpBlob line)
             g_state.connections[uConnection].request.uFlags |= HTTP_REQUEST_FLAG_ACCEPT_GZIP;
         else
             g_state.connections[uConnection].request.uFlags &= ~HTTP_REQUEST_FLAG_ACCEPT_GZIP;
-        return 1;
+
+        bRetVal = 1;
+        goto exit;
     }
 
     // If "Content-Length" header then parse the lenght and set uContentLeft to it
@@ -853,7 +855,9 @@ static int HttpCore_HandleHeaderLine(UINT16 uConnection, struct HttpBlob line)
         // Prepare the request blob to buffer the content
         g_state.connections[uConnection].request.requestContent.pData = g_state.connections[uConnection].headerStart;
         g_state.connections[uConnection].request.requestContent.uLength = 0;
-        return 1;
+
+        bRetVal = 1;
+        goto exit;
     }
     // If "Connection" header then look for "close" and set or clear HTTP_REQUEST_FLAG_CLOSE flag
     // The default behaviour for keep alive or no such header is to keep the connection open in http version 1.1
@@ -867,7 +871,9 @@ static int HttpCore_HandleHeaderLine(UINT16 uConnection, struct HttpBlob line)
             g_state.connections[uConnection].request.uFlags |= HTTP_REQUEST_FLAG_CLOSE;
         else
             g_state.connections[uConnection].request.uFlags &= ~HTTP_REQUEST_FLAG_CLOSE;
-        return 1;
+
+        bRetVal = 1;
+        goto exit;
     }
     // If "Authorization" header the  handle authentication
     if (HttpString_nextToken(HTTP_AUTHORIZATION, sizeof(HTTP_AUTHORIZATION)-1, line) == line.pData)
@@ -880,134 +886,157 @@ static int HttpCore_HandleHeaderLine(UINT16 uConnection, struct HttpBlob line)
 #ifdef HTTP_CORE_ENABLE_AUTH
         HttpAuth_RequestAuthenticate(&g_state.connections[uConnection].request, blobValue);
 #endif
-        return 1;
-    }
-    // None of the above mentioned headers was recognized so just ignore this header
-    return 1;
-}
 
-/**
- * Handle The WebSocket headers (after method) one by one
- * If an empty header is received then the headers section is complete
- * Searches for the headers tokens. If important data is found then it is saved in the connection object
- *
- * returns nonzero if sucessful
- */
-static int WSCore_HandshakeRequest(UINT16 uConnection,struct HttpBlob line)
-{	
-	UINT8* pFound;
-	static UINT16 Origin = 0;
-	char *dataCopy = (char *)malloc(strlen((const char *)line.pData));
-	memset(dataCopy,'\0',strlen((const char *)line.pData));
-	memcpy(dataCopy,(const char *)line.pData,strlen((const char *)line.pData));
-	
-	// NULL line is received when a header line is too long.
-	if (line.pData == NULL)
-			return 1;
-	
-	// Length is 0, this means than End-Of-Headers marker was reached
-	// State of this connection is set to WebSocketResponse
-	if (line.uLength == 0)
-	{
-		g_state.connections[uConnection].connectionState = WebSocketResponse;
-		return 1;
-	}
-	
-	//Connection: Upgrade
-	if (HttpString_nextToken(WS_CONNECTION, sizeof(WS_CONNECTION)-1, line) == line.pData)
+        bRetVal = 1;
+        goto exit;
+    }
+
+    if (HttpString_nextToken(HTTP_UPGRADE_INSECURE_REQUESTS, sizeof(HTTP_UPGRADE_INSECURE_REQUESTS)-1, line) == line.pData)
+    {
+    	bRetVal = 1;
+    	goto exit;
+    }
+
+	//Upgrade: websocket
+    if (HttpString_nextToken(WS_UPGRADE, sizeof(WS_UPGRADE)-1, line) == line.pData)
+    {
+    	line.pData += sizeof(WS_UPGRADE)-1 + 1;
+    	line.uLength -= sizeof(WS_UPGRADE)-1 + 1;
+    	pFound = HttpString_nextToken(WS_WEBSOCKET, sizeof(WS_WEBSOCKET)-1, line);
+    	if (pFound != NULL)
     	{
-        line.pData += sizeof(WS_CONNECTION) + 1;
-        line.uLength -= sizeof(WS_CONNECTION) + 1;
-        pFound = HttpString_nextToken(WS_UPGRADE, sizeof(WS_UPGRADE)-1, line);
-        if (pFound != NULL)
-			return 1;
-        else
-        	return 0;
+    		g_state.connections[uConnection].connectionState = WebSocketRequest;
+    		bRetVal = 1;
+    		//close file as we dont need for websocket connection
+    		sl_FsClose(glFileHandle,0,0,0);
     	}
+    	else
+    	{
+    		bRetVal = 0;
+    	}
+    	goto exit;
+    }
+
+    //Connection: Upgrade
+    if (HttpString_nextToken(WS_CONNECTION, sizeof(WS_CONNECTION)-1, line) == line.pData)
+    {
+    	line.pData += sizeof(WS_CONNECTION) + 1;
+    	line.uLength -= sizeof(WS_CONNECTION) + 1;
+    	if(g_state.connections[uConnection].connectionState == WebSocketRequest)
+    	{
+    		pFound = HttpString_nextToken(WS_UPGRADE, sizeof(WS_UPGRADE)-1, line);
+    		if (pFound == NULL)
+    		{
+    			bRetVal = 0;
+    		}
+    	}
+    	bRetVal = 1;
+    	goto exit;
+    }
 
 	//host: IP address
-		if (HttpString_nextToken(WS_HOST, sizeof(WS_HOST)-1, line) == line.pData)
-	    	{
-	        line.pData += sizeof(WS_HOST) + 1;
-	        line.uLength -= sizeof(WS_HOST) + 1;
-				return 1;
-	    	}
+    if (HttpString_nextToken(WS_HOST, sizeof(WS_HOST)-1, line) == line.pData)
+    {
+        line.pData += sizeof(WS_HOST) + 1;
+        line.uLength -= sizeof(WS_HOST) + 1;
+        bRetVal = 1;
+        goto exit;
+    }
 
-	//Sec-WebSocket-Key: "Client generated key"
-	if (HttpString_nextToken(WS_KEY_REQUEST, sizeof(WS_KEY_REQUEST)-1, line) == line.pData)
-		{
-		memcpy(line.pData,dataCopy,strlen((const char *)line.pData));
-		// We increment twice to circumvent ':' and ' ' and point at the beginning of the key in base64 encoding
-		line.pData += sizeof(WS_KEY_REQUEST) + 1;
-        line.uLength -= sizeof(WS_KEY_REQUEST) + 1;
-        memset(WS_KEY,'\0',WS_KEY_LENGTH+1);
-        memcpy(WS_KEY,line.pData,WS_KEY_LENGTH);
-        HttpDebug("key: %.*s \n\r", WS_KEY);
-		if (WS_KEY != NULL)
-			return 1;
-		}
+    //Sec-WebSocket-Key: "Client generated key"
+    if (HttpString_nextToken(WS_KEY_REQUEST, sizeof(WS_KEY_REQUEST)-1, line) == line.pData)
+    {
+    	// Restore original data from backup as HttpString_nextToken converted all data into
+    	//	lowercase
+    	memcpy(line.pData,dataCopy,strlen((const char *)line.pData));
+    	// We increment twice to circumvent ':' and ' ' and point at the beginning of the key in base64 encoding
+    	line.pData += sizeof(WS_KEY_REQUEST) + 1;
+    	line.uLength -= sizeof(WS_KEY_REQUEST) + 1;
+    	memset(WS_KEY,'\0',WS_KEY_LENGTH+1);
+    	memcpy(WS_KEY,line.pData,WS_KEY_LENGTH);
+    	HttpDebug("key: %.*s \n\r", WS_KEY);
+    	if (WS_KEY != NULL)
+    	{
+    		bRetVal = 1;
+    	}
+    	else
+    	{
+    		bRetVal = 0;
+    	}
+    	goto exit;
+    }
 
 	//Sec-WebSocket-Version = 13
 	if (HttpString_nextToken(WS_VERSION_REQUEST, sizeof(WS_VERSION_REQUEST)-1, line) == line.pData)
-		{
-		line.pData += sizeof(WS_VERSION_REQUEST) + 1;
-        line.uLength -= sizeof(WS_VERSION_REQUEST) + 1;
-        pFound = HttpString_nextToken(WS_VERSION, sizeof(WS_VERSION)-1, line);
-		if (pFound != NULL)
-        	return 1;
-		}
+    {
+    	line.pData += sizeof(WS_VERSION_REQUEST) + 1;
+    	line.uLength -= sizeof(WS_VERSION_REQUEST) + 1;
+    	pFound = HttpString_nextToken(WS_VERSION, sizeof(WS_VERSION)-1, line);
+    	if (pFound != NULL)
+    	{
+    		bRetVal = 1;
+    	}
+    	goto exit;
+    }
 
 	//Sec-WebSocket-Extension - Later versions may support -TODO
-		if (HttpString_nextToken(WS_EXTENSION, sizeof(WS_EXTENSION)-1, line) == line.pData)
-			{
-			line.pData += sizeof(WS_EXTENSION) + 1;
-	        line.uLength -= sizeof(WS_EXTENSION) + 1;
-	        return 1;
-			}
+    if (HttpString_nextToken(WS_EXTENSION, sizeof(WS_EXTENSION)-1, line) == line.pData)
+    {
+        line.pData += sizeof(WS_EXTENSION) + 1;
+        line.uLength -= sizeof(WS_EXTENSION) + 1;
+        bRetVal = 1;
+        goto exit;
+    }
 
 	//pragma field - TODO
 	if (HttpString_nextToken(WS_PRAGMA, sizeof(WS_PRAGMA)-1, line) == line.pData)
-		{
-			line.pData += sizeof(WS_PRAGMA) + 1;
-	        line.uLength -= sizeof(WS_PRAGMA) + 1;
-	        return 1;
-		}
+    {
+        line.pData += sizeof(WS_PRAGMA) + 1;
+        line.uLength -= sizeof(WS_PRAGMA) + 1;
+        bRetVal = 1;
+        goto exit;
+    }
 
 	//cache-control field - TODO
-		if (HttpString_nextToken(WS_CACHE_CONTROL, sizeof(WS_CACHE_CONTROL)-1, line) == line.pData)
-			{
-				line.pData += sizeof(WS_CACHE_CONTROL) + 1;
-		        line.uLength -= sizeof(WS_CACHE_CONTROL) + 1;
-		        return 1;
-			}
+    if (HttpString_nextToken(WS_CACHE_CONTROL, sizeof(WS_CACHE_CONTROL)-1, line) == line.pData)
+    {
+        line.pData += sizeof(WS_CACHE_CONTROL) + 1;
+        line.uLength -= sizeof(WS_CACHE_CONTROL) + 1;
+        bRetVal = 1;
+        goto exit;
+    }
 
 	//Origin
 	// If this header field doesn't exist, the client is not a browser. Flag will be set accordingly.
 	// The server may block communication with an origin it does not validate by sending HTTP error code - Not implemented
 	// If it doesn't recognise the origin it will accept data packets from anywhere
-	if(Origin == 0)
-	{
-	if (HttpString_nextToken(WS_ORIGIN, sizeof(WS_ORIGIN)-1, line) == line.pData)
-		{
-		line.pData += sizeof(WS_ORIGIN) + 1;
-        line.uLength -= sizeof(WS_ORIGIN) + 1;
-        g_state.connections[uConnection].request.uFlags |= WS_REQUEST_BROWSER;
-        WS_ORIGIN_NAME = (char *)malloc(line.uLength+1);
-        memset(WS_ORIGIN_NAME,'\0',line.uLength+1);
-        memcpy(WS_ORIGIN_NAME,line.pData,line.uLength);
-        Origin = 1;
-		}
-	else
-		{
-		g_state.connections[uConnection].request.uFlags &= ~WS_REQUEST_BROWSER;
-		HttpDebug("Non Browser Client\n");
-		}
-	}
+    if (HttpString_nextToken(WS_ORIGIN, sizeof(WS_ORIGIN)-1, line) == line.pData)
+    {
+    	line.pData += sizeof(WS_ORIGIN) + 1;
+    	line.uLength -= sizeof(WS_ORIGIN) + 1;
+    	g_state.connections[uConnection].request.uFlags |= WS_REQUEST_BROWSER;
+    	WS_ORIGIN_NAME = (char *)realloc(WS_ORIGIN_NAME, line.uLength+1);
+    	if(WS_ORIGIN_NAME == NULL)
+    	{
+    		bRetVal = 0;
+    	}
+    	memset(WS_ORIGIN_NAME,'\0',line.uLength+1);
+    	memcpy(WS_ORIGIN_NAME,line.pData,line.uLength);
+    	bRetVal = 1;
+    	goto exit;
+    }
+    else
+    {
+    	g_state.connections[uConnection].request.uFlags &= ~WS_REQUEST_BROWSER;
+    	HttpDebug("Non Browser Client\n");
+    	bRetVal = 1;
+    	goto exit;
+    }
 
-	free(dataCopy);
-	return 1;
-	//Sec-WebSocket-Protocol and Extensions not implemented - Optional
-	
+exit:
+   	free(dataCopy);
+    // None of the above mentioned headers was recognized so just ignore this header
+    return bRetVal;
 }
 
 
@@ -1333,22 +1362,21 @@ int HttpResponse_Content(UINT16 uConnection, struct HttpBlob content)
 */
 int WSCore_HandshakeResponse(UINT16 uConnection, struct HttpBlob line)
 {
-		UINT16 WS_STATUS_CODE = 101;
-		char WS_HEADER[] = "Web Socket Protocol Handshake";
-		struct HttpBlob packet;
-		char *InKey, *OutKey, *EncOutKey;
+	UINT16 WS_STATUS_CODE = 101;
+	char WS_HEADER[] = "Web Socket Protocol Handshake";
+	struct HttpBlob packet;
+	char InKey[WS_KEY_LENGTH + sizeof(WS_MAGIC_STRING)+1];
+	char OutKey[WS_KEY_LENGTH + sizeof(WS_MAGIC_STRING) + 1];
+	char EncOutKey[WS_KEY_LENGTH + sizeof(WS_MAGIC_STRING) + 1];;
 
-		// InKey is the key client sent. It is concatenated with magic string stored in server.
-		// OutKey is SHA-1 output of InKey
-		// EncOutKey is OutKey after base64 encoding.
-		InKey = (char *)malloc(WS_KEY_LENGTH + strlen(WS_MAGIC_STRING)+1);
-		memset(InKey,'\0',WS_KEY_LENGTH + strlen(WS_MAGIC_STRING)+1);
-		memcpy(InKey,WS_KEY,strlen(WS_KEY));
-		OutKey = (char *)malloc(WS_KEY_LENGTH + strlen(WS_MAGIC_STRING));
-		memset(OutKey,'\0',WS_KEY_LENGTH + strlen(WS_MAGIC_STRING));
-		EncOutKey = (char *)malloc(WS_KEY_LENGTH + strlen(WS_MAGIC_STRING));
-		memset(EncOutKey,'\0',WS_KEY_LENGTH + strlen(WS_MAGIC_STRING));
-		InKey = strcat(WS_KEY,WS_MAGIC_STRING);
+	// InKey is the key client sent. It is concatenated with magic string stored in server.
+	// OutKey is SHA-1 output of InKey
+	// EncOutKey is OutKey after base64 encoding.
+	memset(InKey,'\0',WS_KEY_LENGTH + sizeof(WS_MAGIC_STRING)+1);
+	memcpy(InKey,(const char*)WS_KEY,strlen((const char*)WS_KEY));
+	memset(OutKey,'\0',WS_KEY_LENGTH + sizeof(WS_MAGIC_STRING) + 1);
+	memset(EncOutKey,'\0',WS_KEY_LENGTH + sizeof(WS_MAGIC_STRING) + 1);
+	strncat(InKey,WS_MAGIC_STRING, sizeof(WS_MAGIC_STRING));
 
 		// The header field stating this is HTTP version 1.1. Version 1.0 is not supported by WebSockets
 		// Status code 101 shows successful handshake.

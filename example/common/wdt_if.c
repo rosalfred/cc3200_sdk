@@ -46,7 +46,7 @@
 #include "rom_map.h"
 #include "interrupt.h"
 #include "wdt_if.h"
-#ifdef USE_TIRTOS
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED)
 #include "osi.h"
 #endif
 /****************************************************************************/
@@ -81,9 +81,13 @@ void WDT_IF_Init(fAPPWDTDevCallbk fpAppWDTCB,
 
     if(fpAppWDTCB != NULL)
     {
-#ifdef USE_TIRTOS
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED) 
+        // USE_TIRTOS: if app uses TI-RTOS (either networking/non-networking)
+        // USE_FREERTOS: if app uses Free-RTOS (either networking/non-networking)
+        // SL_PLATFORM_MULTI_THREADED: if app uses any OS + networking(simplelink)
         osi_InterruptRegister(INT_WDT, fpAppWDTCB, INT_PRIORITY_LVL_1);
 #else
+		MAP_IntPrioritySet(INT_WDT, INT_PRIORITY_LVL_1);
         MAP_WatchdogIntRegister(WDT_BASE,fpAppWDTCB);
 #endif
     }

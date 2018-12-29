@@ -53,7 +53,7 @@
 #include "rom_map.h"
 
 // OS includes
-#ifdef USE_TIRTOS
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED)
 #include <stdlib.h>
 #include "osi.h"
 #endif
@@ -79,15 +79,15 @@ static unsigned long ulReg[]=
 unsigned int g_uiLED1Port = 0,g_uiLED2Port = 0,g_uiLED3Port = 0;
 unsigned char g_ucLED1Pin,g_ucLED2Pin,g_ucLED3Pin;
 
-#define PIN_LED1 9
-#define PIN_LED2 10
-#define PIN_LED3 11
+#define GPIO_LED1 9
+#define GPIO_LED2 10
+#define GPIO_LED3 11
 
 
 //****************************************************************************
 //                      LOCAL FUNCTION DEFINITIONS                          
 //****************************************************************************
-#ifdef USE_TIRTOS
+
 static unsigned char
 GetPeripheralIntNum(unsigned int uiGPIOPort)
 {
@@ -107,7 +107,6 @@ GetPeripheralIntNum(unsigned int uiGPIOPort)
     }
 
 }
-#endif
 
 //*****************************************************************************
 //
@@ -125,21 +124,21 @@ GPIO_IF_LedConfigure(unsigned char ucPins)
 
   if(ucPins & LED1)
   {
-    GPIO_IF_GetPortNPin(PIN_LED1,
+    GPIO_IF_GetPortNPin(GPIO_LED1,
                         &g_uiLED1Port,
                         &g_ucLED1Pin);
   }
 
   if(ucPins & LED2)
   {
-    GPIO_IF_GetPortNPin(PIN_LED2,
+    GPIO_IF_GetPortNPin(GPIO_LED2,
                   &g_uiLED2Port,
           &g_ucLED2Pin);
   }
 
   if(ucPins & LED3)
   {
-    GPIO_IF_GetPortNPin(PIN_LED3,
+    GPIO_IF_GetPortNPin(GPIO_LED3,
                       &g_uiLED3Port,
                       &g_ucLED3Pin);
 
@@ -168,7 +167,7 @@ GPIO_IF_LedOn(char ledNum)
         case MCU_GREEN_LED_GPIO:
         {
           /* Switch ON GREEN LED */
-          GPIO_IF_Set(PIN_LED3, g_uiLED3Port, g_ucLED3Pin, 1);
+          GPIO_IF_Set(GPIO_LED3, g_uiLED3Port, g_ucLED3Pin, 1);
           break;
         }
         case MCU_SENDING_DATA_IND:
@@ -176,7 +175,7 @@ GPIO_IF_LedOn(char ledNum)
         case MCU_ORANGE_LED_GPIO:
         {
           /* Switch ON ORANGE LED */
-          GPIO_IF_Set(PIN_LED2, g_uiLED2Port, g_ucLED2Pin, 1);
+          GPIO_IF_Set(GPIO_LED2, g_uiLED2Port, g_ucLED2Pin, 1);
           break;
         }
         case MCU_ASSOCIATED_IND:
@@ -186,15 +185,15 @@ GPIO_IF_LedOn(char ledNum)
         case MCU_RED_LED_GPIO:
         {
           /* Switch ON RED LED */
-          GPIO_IF_Set(PIN_LED1, g_uiLED1Port, g_ucLED1Pin, 1);
+          GPIO_IF_Set(GPIO_LED1, g_uiLED1Port, g_ucLED1Pin, 1);
           break;
         }
         case MCU_ALL_LED_IND:
         {
           /* Switch ON ALL LEDs LED */
-          GPIO_IF_Set(PIN_LED3, g_uiLED3Port, g_ucLED3Pin, 1);
-          GPIO_IF_Set(PIN_LED2, g_uiLED2Port, g_ucLED2Pin, 1);
-          GPIO_IF_Set(PIN_LED1, g_uiLED1Port, g_ucLED1Pin, 1);
+          GPIO_IF_Set(GPIO_LED3, g_uiLED3Port, g_ucLED3Pin, 1);
+          GPIO_IF_Set(GPIO_LED2, g_uiLED2Port, g_ucLED2Pin, 1);
+          GPIO_IF_Set(GPIO_LED1, g_uiLED1Port, g_ucLED1Pin, 1);
           break;
         }
         default:
@@ -223,7 +222,7 @@ GPIO_IF_LedOff(char ledNum)
     case MCU_GREEN_LED_GPIO:
     {
       /* Switch OFF GREEN LED */
-      GPIO_IF_Set(PIN_LED3, g_uiLED3Port, g_ucLED3Pin, 0);
+      GPIO_IF_Set(GPIO_LED3, g_uiLED3Port, g_ucLED3Pin, 0);
       break;
     }
     case MCU_SENDING_DATA_IND:
@@ -231,7 +230,7 @@ GPIO_IF_LedOff(char ledNum)
     case MCU_ORANGE_LED_GPIO:
     {
       /* Switch OFF ORANGE LED */
-      GPIO_IF_Set(PIN_LED2, g_uiLED2Port, g_ucLED2Pin, 0);
+      GPIO_IF_Set(GPIO_LED2, g_uiLED2Port, g_ucLED2Pin, 0);
       break;
     }
     case MCU_ASSOCIATED_IND:
@@ -241,15 +240,15 @@ GPIO_IF_LedOff(char ledNum)
     case MCU_RED_LED_GPIO:
     {
       /* Switch OFF RED LED */
-      GPIO_IF_Set(PIN_LED1, g_uiLED1Port, g_ucLED1Pin, 0);
+      GPIO_IF_Set(GPIO_LED1, g_uiLED1Port, g_ucLED1Pin, 0);
       break;
     }
     case MCU_ALL_LED_IND:
     {
       /* Switch OFF ALL LEDs LED */
-      GPIO_IF_Set(PIN_LED3, g_uiLED3Port, g_ucLED3Pin, 0);
-      GPIO_IF_Set(PIN_LED2, g_uiLED2Port, g_ucLED2Pin, 0);
-      GPIO_IF_Set(PIN_LED1, g_uiLED1Port, g_ucLED1Pin, 0);
+      GPIO_IF_Set(GPIO_LED3, g_uiLED3Port, g_ucLED3Pin, 0);
+      GPIO_IF_Set(GPIO_LED2, g_uiLED2Port, g_ucLED2Pin, 0);
+      GPIO_IF_Set(GPIO_LED1, g_uiLED1Port, g_ucLED1Pin, 0);
       break;
     }
     default:
@@ -382,11 +381,15 @@ GPIO_IF_ConfigureNIntEnable(unsigned int uiGPIOPort,
     //
     // Register Interrupt handler
     //
-#ifdef USE_TIRTOS
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED) 
+    // USE_TIRTOS: if app uses TI-RTOS (either networking/non-networking)
+    // USE_FREERTOS: if app uses Free-RTOS (either networking/non-networking)
+    // SL_PLATFORM_MULTI_THREADED: if app uses any OS + networking(simplelink)
     osi_InterruptRegister(GetPeripheralIntNum(uiGPIOPort),
                                         pfnIntHandler, INT_PRIORITY_LVL_1);
                 
 #else
+	MAP_IntPrioritySet(GetPeripheralIntNum(uiGPIOPort), INT_PRIORITY_LVL_1);
     MAP_GPIOIntRegister(uiGPIOPort,pfnIntHandler);
 #endif
 

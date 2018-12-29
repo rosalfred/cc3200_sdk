@@ -51,11 +51,13 @@
 #include "inc/hw_gprcm.h"
 #include "inc/hw_hib1p2.h"
 #include "inc/hw_hib3p3.h"
+#include "inc/hw_common_reg.h"
 #include "prcm.h"
 #include "interrupt.h"
 #include "cpu.h"
 #include "flash.h"
 #include "utils.h"
+
 
 
 //*****************************************************************************
@@ -107,8 +109,23 @@
 //*****************************************************************************
 // Register Access and Updates
 //
-// Tick of SCC has a resolution of 32768Hz. Therefore, scaling SCC value by 32
-// yields ~1 msec resolution. All operations of SCC in RTC context use ms unit.
+// Tick of SCC has a resolution of 32768Hz, meaning 1 sec is equal to 32768
+// clock ticks. Ideal way of getting time in millisecond will involve floating
+// point arithmetic (division by 32.768). To avoid this, we simply divide it by
+// 32, which will give a range from 0 -1023(instead of 0-999). To use this
+// output correctly we have to take care of this inaccuracy externally.
+// following wrapper can be used to convert the value from cycles to
+// millisecond:
+//
+// CYCLES_U16MS(cycles)	((cycles *1000)/ 1024),
+//
+// Similarly, before setting the value, it must be first converted (from ms to
+// cycles).
+//
+// U16MS_CYCLES(msec)	((msec *1024)/1000)
+//
+// Note: There is a precision loss of 1 ms with the above scheme.
+//
 //*****************************************************************************
 #define SCC_U64MSEC_GET()                (PRCMSlowClkCtrGet() >> 5)
 #define SCC_U64MSEC_MATCH_SET(u64Msec)   (PRCMSlowClkCtrMatchSet(u64Msec << 5))
@@ -241,24 +258,6 @@ static const PRCM_PeriphRegs_t PRCM_PeriphRegsList[] =
 
 //*****************************************************************************
 //
-//! Performs a software reset of a SOC
-//!
-//! This function performs a software reset of a SOC
-//!
-//! \return None.
-//
-//*****************************************************************************
-void PRCMSOCReset()
-{
-  //
-  // Reset MCU
-  //
-  HWREG(GPRCM_BASE+ GPRCM_O_MCU_GLOBAL_SOFT_RESET) |= 0x1;
-
-}
-
-//*****************************************************************************
-//
 //! Performs a software reset of a MCU and associated peripherals
 //!
 //! \param bIncludeSubsystem is \b true to reset associated peripherals.
@@ -285,6 +284,19 @@ void PRCMMCUReset(tBoolean bIncludeSubsystem)
     // Reset Apps processor only
     //
     HWREG(GPRCM_BASE+ GPRCM_O_APPS_SOFT_RESET) = 0x1;
+  }
+
+  //
+  // Wait for system to reset
+  //
+  __asm("    wfi\n");
+
+  //
+  // Infinite loop
+  //
+  while(1)
+  {
+
   }
 }
 
@@ -344,7 +356,6 @@ unsigned long PRCMSysResetCauseGet()
 //! The parameter \e ulClkFlags can be logical OR of the following:
 //! -\b PRCM_RUN_MODE_CLK - Ungates clock to the peripheral
 //! -\b PRCM_SLP_MODE_CLK - Keeps the clocks ungated in sleep.
-//! -\b PRCM_DSLP_MODE_CLK - Keeps the clock ungated in deepsleep.
 //!
 //! \return None.
 //
@@ -600,18 +611,28 @@ PRCMLPDSRestoreInfoSet(unsigned long ulStackPtr, unsigned long ulProgCntr)
 //! \sa PRCMLPDSRestoreInfoSet().
 //!
 //! \return None.
+//!
+//! \note  External debugger will always disconnect whenever the system
+//!  enters LPDS and debug interface is shutdown until next POR reset. In order
+//!  to avoid this and allow for connecting back the debugger after waking up
+//!  from LPDS \sa PRCMLPDSEnterKeepDebugIf().
+//!
 //
 //*****************************************************************************
 void
 PRCMLPDSEnter()
 {
-  volatile unsigned long ulDelay;
+  unsigned long ulChipId;
+
+  //
+  // Read the Chip ID
+  //
+  ulChipId = ((HWREG(GPRCM_BASE + GPRCM_O_GPRCM_EFUSE_READ_REG2) >> 16) & 0x1F);
 
   //
   // Check if flash exists
   //
-  if(HWREG((GPRCM_BASE +
-            GPRCM_O_GPRCM_EFUSE_READ_REG2) & 0x00110000) == 0x00110000)
+  if( (0x11 == ulChipId) || (0x19 == ulChipId))
   {
 
     //
@@ -639,10 +660,85 @@ PRCMLPDSEnter()
   HWREG(ARCM_BASE + APPS_RCM_O_APPS_LPDS_REQ)
           = APPS_RCM_APPS_LPDS_REQ_APPS_LPDS_REQ;
 
-  __asm("    nop\n"
-        "    nop\n"
-        "    nop\n"
-        "    nop\n");
+  //
+  // Wait for system to enter LPDS
+  //
+  __asm("    wfi\n");
+
+  //
+  // Infinite loop
+  //
+  while(1)
+  {
+
+  }
+
+}
+
+
+//*****************************************************************************
+//
+//! Puts the system into Low Power Deel Sleep (LPDS) power mode keeping
+//! debug interface alive.
+//!
+//! This function puts the system into Low Power Deel Sleep (LPDS) power mode
+//! keeping debug interface alive. A call to this function never returns and the
+//! execution starts from Reset \sa PRCMLPDSRestoreInfoSet().
+//!
+//! \return None.
+//!
+//! \note External debugger will always disconnect whenever the system
+//!  enters LPDS, using this API will allow connecting back the debugger after
+//!  waking up from LPDS. This API is recommended for development purposes
+//!  only as it adds to the current consumption of the system.
+//!
+//
+//*****************************************************************************
+void
+PRCMLPDSEnterKeepDebugIf()
+{
+  unsigned long ulChipId;
+
+  //
+  // Read the Chip ID
+  //
+  ulChipId = ((HWREG(GPRCM_BASE + GPRCM_O_GPRCM_EFUSE_READ_REG2) >> 16) & 0x1F);
+
+  //
+  // Check if flash exists
+  //
+  if( (0x11 == ulChipId) || (0x19 == ulChipId))
+  {
+
+    //
+    // Disable the flash
+    //
+    FlashDisable();
+  }
+
+  //
+  // Set bandgap duty cycle to 1
+  //
+  HWREG(HIB1P2_BASE + HIB1P2_O_BGAP_DUTY_CYCLING_EXIT_CFG) = 0x1;
+
+  //
+  // Request LPDS
+  //
+  HWREG(ARCM_BASE + APPS_RCM_O_APPS_LPDS_REQ)
+          = APPS_RCM_APPS_LPDS_REQ_APPS_LPDS_REQ;
+
+  //
+  // Wait for system to enter LPDS
+  //
+  __asm("    wfi\n");
+
+  //
+  // Infinite loop
+  //
+  while(1)
+  {
+
+  }
 
 }
 
@@ -815,52 +911,14 @@ PRCMSleepEnter()
 
 //*****************************************************************************
 //
-//! Puts the system into Deep Sleep power mode.
-//!
-//! This function puts the system into Deep Sleep power mode. System exits the
-//! power state on any one of the available interrupt. On exit from deep
-//! sleep the function returns to the calling function with all the processor
-//! core registers retained.
-//!
-//! \return None.
-//
-//*****************************************************************************
-void
-PRCMDeepSleepEnter()
-{
-  //
-  // Set bandgap duty cycle to 1
-  //
-  HWREG(HIB1P2_BASE + HIB1P2_O_BGAP_DUTY_CYCLING_EXIT_CFG) = 0x1;
-
-  //
-  // Enable DSLP in cortex
-  //
-  HWREG(0xE000ED10)|=1<<2;
-
-  //
-  // Request Deep Sleep
-  //
-  CPUwfi();
-
-  //
-  // Disable DSLP in cortex before
-  // returning to the caller
-  //
-  HWREG(0xE000ED10) &= ~(1<<2);
-
-}
-
-//*****************************************************************************
-//
-//! Enable SRAM column retention during Deep Sleep and/or LPDS Power mode(s)
+//! Enable SRAM column retention during LPDS Power mode(s)
 //!
 //! \param ulSramColSel is bit mask of valid SRAM columns.
 //! \param ulModeFlags is the bit mask of power modes.
 //!
 //! This functions enables the SRAM retention. The device supports configurable
-//! SRAM column retention in Low Power Deep Sleep (LPDS) and Deep Sleep power
-//! modes. Each column is of 64 KB size.
+//! SRAM column retention in Low Power Deep Sleep (LPDS). Each column is of
+//! 64 KB size.
 //!
 //! The parameter \e ulSramColSel should be logical OR of the following:-
 //! -\b PRCM_SRAM_COL_1
@@ -870,7 +928,6 @@ PRCMDeepSleepEnter()
 //!
 //! The parameter \e ulModeFlags selects the power modes and sholud be logical
 //! OR of one or more of the following
-//! -\b PRCM_SRAM_DSLP_RET
 //! -\b PRCM_SRAM_LPDS_RET
 //!
 //! \return None.
@@ -879,14 +936,6 @@ PRCMDeepSleepEnter()
 void
 PRCMSRAMRetentionEnable(unsigned long ulSramColSel, unsigned long ulModeFlags)
 {
-  if(ulModeFlags & PRCM_SRAM_DSLP_RET)
-  {
-    //
-    // Configure deep sleep SRAM retention register
-    //
-    HWREG(GPRCM_BASE+ GPRCM_O_APPS_SRAM_DSLP_CFG) = (ulSramColSel & 0xF);
-  }
-
   if(ulModeFlags & PRCM_SRAM_LPDS_RET)
   {
     //
@@ -898,14 +947,14 @@ PRCMSRAMRetentionEnable(unsigned long ulSramColSel, unsigned long ulModeFlags)
 
 //*****************************************************************************
 //
-//! Disable SRAM column retention during Deep Sleep and/or LPDS Power mode(s).
+//! Disable SRAM column retention during LPDS Power mode(s).
 //!
 //! \param ulSramColSel is bit mask of valid SRAM columns.
 //! \param ulFlags is the bit mask of power modes.
 //!
 //! This functions disable the SRAM retention. The device supports configurable
-//! SRAM column retention in Low Power Deep Sleep (LPDS) and Deep Sleep power
-//! modes. Each column is of 64 KB size.
+//! SRAM column retention in Low Power Deep Sleep (LPDS). Each column is
+//! of 64 KB size.
 //!
 //! The parameter \e ulSramColSel should be logical OR of the following:-
 //! -\b PRCM_SRAM_COL_1
@@ -915,7 +964,6 @@ PRCMSRAMRetentionEnable(unsigned long ulSramColSel, unsigned long ulModeFlags)
 //!
 //! The parameter \e ulFlags selects the power modes and sholud be logical OR
 //! of one or more of the following
-//! -\b PRCM_SRAM_DSLP_RET
 //! -\b PRCM_SRAM_LPDS_RET
 //!
 //! \return None.
@@ -924,14 +972,6 @@ PRCMSRAMRetentionEnable(unsigned long ulSramColSel, unsigned long ulModeFlags)
 void
 PRCMSRAMRetentionDisable(unsigned long ulSramColSel, unsigned long ulFlags)
 {
-  if(ulFlags & PRCM_SRAM_DSLP_RET)
-  {
-    //
-    // Configure deep sleep SRAM retention register
-    //
-    HWREG(GPRCM_BASE+ GPRCM_O_APPS_SRAM_DSLP_CFG) &= ~(ulSramColSel & 0xF);
-  }
-
   if(ulFlags & PRCM_SRAM_LPDS_RET)
   {
     //
@@ -1157,7 +1197,7 @@ PRCMHibernateWakeUpGPIOSelect(unsigned long ulGPIOBitMap, unsigned long ulType)
     if(ulGPIOBitMap & (1<<ucLoop))
     {
       ulRegValue  = PRCMHIBRegRead(HIB3P3_BASE+HIB3P3_O_MEM_GPIO_WAKE_CONF);
-      ulRegValue |= (ulType << (ucLoop*2));
+      ulRegValue = (ulRegValue & (~(0x3 << (ucLoop*2)))) | (ulType <<(ucLoop*2));
       PRCMHIBRegWrite(HIB3P3_BASE+HIB3P3_O_MEM_GPIO_WAKE_CONF, ulRegValue);
     }
   }
@@ -1183,10 +1223,18 @@ PRCMHibernateEnter()
   //
   PRCMHIBRegWrite((HIB3P3_BASE+HIB3P3_O_MEM_HIB_REQ),0x1);
 
-  __asm("    nop\n"
-        "    nop\n"
-        "    nop\n"
-        "    nop\n");
+  //
+  // Wait for system to enter hibernate
+  //
+  __asm("    wfi\n");
+
+  //
+  // Infinite loop
+  //
+  while(1)
+  {
+
+  }
 }
 
 //*****************************************************************************
@@ -1218,6 +1266,35 @@ PRCMSlowClkCtrGet()
   return ullRTCVal;
 }
 
+//*****************************************************************************
+//
+//! Gets the current value of the internal slow clock counter
+//!
+//! This function is similar to \sa PRCMSlowClkCtrGet() but reads the counter
+//! value from a relatively faster interface using an auto-latch mechainsm.
+//!
+//! \note Due to the nature of implemetation of auto latching, when using this
+//! API, the recommendation is to read the value thrice and identify the right
+//! value (as 2 out the 3 read values will always be correct and with a max. of
+//! 1 LSB change)
+//!
+//! \return 64-bit current counter vlaue.
+//
+//*****************************************************************************
+unsigned long long PRCMSlowClkCtrFastGet(void)
+{
+  unsigned long long ullRTCVal;
+
+  //
+  // Read as 2 32-bit values
+  //
+  ullRTCVal = HWREG(HIB1P2_BASE + HIB1P2_O_HIB_RTC_TIMER_MSW_1P2);
+  ullRTCVal = ullRTCVal << 32;
+  ullRTCVal |= HWREG(HIB1P2_BASE + HIB1P2_O_HIB_RTC_TIMER_LSW_1P2);
+
+  return ullRTCVal;
+
+}
 
 //*****************************************************************************
 //
@@ -1638,6 +1715,8 @@ void PRCMRTCMatchGet(unsigned long *ulSecs, unsigned short *usMsec)
 void PRCMCC3200MCUInit()
 {
 
+  if( PRCMSysResetCauseGet() != PRCM_LPDS_EXIT )
+  {
 #ifdef CC3200_ES_1_2_1
 
     unsigned long ulRegVal;
@@ -1688,25 +1767,25 @@ void PRCMCC3200MCUInit()
     ulRegVal = (ulRegVal & ~0x3FF) | 0x155;
     HWREG(0x400F703C) = ulRegVal;
 
-   //
-   // Enable 32KHz internal RC oscillator
-   //
-   PRCMHIBReadRegWrite(HIB3P3_BASE+HIB3P3_O_MEM_INT_OSC_CONF, 0x00000101);
+    //
+    // Enable 32KHz internal RC oscillator
+    //
+    PRCMHIBRegWrite(HIB3P3_BASE+HIB3P3_O_MEM_INT_OSC_CONF, 0x00000101);
 
-  //
-  // Delay for a little bit.
-  //
-  UtilsDelay(8000);
+    //
+    // Delay for a little bit.
+    //
+    UtilsDelay(8000);
 
-  //
-  // Enable 16MHz clock
-  //
-  HWREG(HIB1P2_BASE+HIB1P2_O_CM_OSC_16M_CONFIG) = 0x00010008;
+    //
+    // Enable 16MHz clock
+    //
+    HWREG(HIB1P2_BASE+HIB1P2_O_CM_OSC_16M_CONFIG) = 0x00010008;
 
-  //
-  // Delay for a little bit.
-  //
-  UtilsDelay(8000);
+    //
+    // Delay for a little bit.
+    //
+    UtilsDelay(8000);
 
 
 
@@ -1807,6 +1886,26 @@ void PRCMCC3200MCUInit()
     // Disable the sleep for ANA DCDC
     //
     HWREG(0x4402F0A8) |= 0x00000004 ;
+  }
+  else
+  {
+    unsigned long ulRegVal;
+
+    //
+    // I2C Configuration
+    //
+    ulRegVal = HWREG(COMMON_REG_BASE + COMMON_REG_O_I2C_Properties_Register);
+    ulRegVal = (ulRegVal & ~0x3) | 0x1;
+    HWREG(COMMON_REG_BASE + COMMON_REG_O_I2C_Properties_Register) = ulRegVal;
+
+    //
+    // GPIO configuration
+    //
+    ulRegVal = HWREG(COMMON_REG_BASE + COMMON_REG_O_GPIO_properties_register);
+    ulRegVal = (ulRegVal & ~0x3FF) | 0x155;
+    HWREG(COMMON_REG_BASE + COMMON_REG_O_GPIO_properties_register) = ulRegVal;
+
+  }
 
 
 }
@@ -1867,6 +1966,63 @@ void PRCMHIBRegWrite(unsigned long ulRegAddr, unsigned long ulValue)
   // Wait for 200 uSec
   //
   UtilsDelay((80*200)/3);
+}
+
+//*****************************************************************************
+//
+//! \param ulDivider is clock frequency divider value
+//! \param ulWidth is the width of the high pulse
+//!
+//! This function sets the input frequency for camera module.
+//!
+//! The frequency is calculated as follows:
+//!
+//!        f_out = 240MHz/ulDivider;
+//!
+//! The parameter \e ulWidth sets the width of the high pulse.
+//!
+//! For e.g.:
+//!
+//!     ulDivider = 4;
+//!     ulWidth   = 2;
+//!
+//!     f_out = 30 MHz and 50% duty cycle
+//!
+//! And,
+//!
+//!     ulDivider = 4;
+//!     ulWidth   = 1;
+//!
+//!     f_out = 30 MHz and 25% duty cycle
+//!
+//! \return 0 on success, 1 on error
+//
+//*****************************************************************************
+unsigned long PRCMCameraFreqSet(unsigned char ulDivider, unsigned char ulWidth)
+{
+    if(ulDivider > ulWidth && ulWidth != 0 )
+    {
+      //
+      // Set  the hifh pulse width
+      //
+      HWREG(ARCM_BASE +
+            APPS_RCM_O_CAMERA_CLK_GEN) = (((ulWidth & 0x07) -1) << 8);
+
+      //
+      // Set the low pulse width
+      //
+      HWREG(ARCM_BASE +
+            APPS_RCM_O_CAMERA_CLK_GEN) = ((ulDivider - ulWidth - 1) & 0x07);
+      //
+      // Return success
+      //
+      return 0;
+    }
+
+    //
+    // Success;
+    //
+    return 1;
 }
 
 //*****************************************************************************

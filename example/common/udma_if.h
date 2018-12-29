@@ -63,16 +63,6 @@ typedef void (*tAppCallbackHndl)(void);
 //
 void UDMAInit();
 void UDMAChannelSelect(unsigned int uiChannel, tAppCallbackHndl pfpAppCb);
-void SetupTransfer(
-                  unsigned long ulChannel, 
-                  unsigned long ulMode,
-                  unsigned long ulItemCount,
-                  unsigned long ulItemSize, 
-                  unsigned long ulArbSize,
-                  void *pvSrcBuf, 
-                  unsigned long ulSrcInc,
-                  void *pvDstBuf, 
-                  unsigned long ulDstInc);
 void UDMASetupAutoMemTransfer(
                               unsigned long ulChannel,
                               void *pvSrcBuf,
@@ -88,10 +78,10 @@ void UDMASetupPingPongTransfer(
 void UDMAStartTransfer(unsigned long ulChannel);
 void UDMAStopTransfer(unsigned long ulChannel);
 void UDMADeInit();
-void DMASetupTransfer(unsigned long ulChannel, unsigned long ulMode,
-                      unsigned long ulItemCount, unsigned long ulItemSize,
-                      unsigned long ulArbSize, void *pvSrcBuf,
-                      unsigned long ulSrcInc, void *pvDstBuf, unsigned long ulDstInc);
+void UDMASetupTransfer(unsigned long ulChannel, unsigned long ulMode,
+                       unsigned long ulItemCount, unsigned long ulItemSize,
+                       unsigned long ulArbSize, void *pvSrcBuf,
+                       unsigned long ulSrcInc, void *pvDstBuf, unsigned long ulDstInc);
 //*****************************************************************************
 //
 // Mark the end of the C bindings section for C++ compilers.

@@ -55,6 +55,10 @@ unsigned long * const __init_location = (unsigned long *)INIT_LOCATION;
 //*****************************************************************************
 unsigned long * const __recloc_location = (unsigned long *)RELOC_LOCATION;
 
+//*****************************************************************************
+// Fucntion Decleration
+//*****************************************************************************
+void RunRelocated(unsigned long ulBaseLoc);
 
 //*****************************************************************************
 //
@@ -69,21 +73,33 @@ unsigned long * const __recloc_location = (unsigned long *)RELOC_LOCATION;
 //! \return None.
 //
 //*****************************************************************************
-static void RunRelocated(unsigned long ulBaseLoc)
+#ifndef ccs
+void RunRelocated(unsigned long ulBaseLoc)
 {
 
   //
   // Set the SP
   //
-  asm(" ldr    sp,[r0]\n"
-      " add    r0,r0,#4");
+  __asm("	ldr    sp,[r0]\n"
+	"	add    r0,r0,#4");
 
   //
   // Jump to entry code
   //
-  asm(" ldr    r1,[r0]\n"
-      " bx     r1");
+  __asm("	ldr    r1,[r0]\n"
+        "	bx     r1");
 }
+#else
+__asm("    .sect \".text:RunRelocated\"\n"
+      "    .clink\n"
+      "    .thumbfunc RunRelocated\n"
+      "    .thumb\n"
+      "RunRelocated:\n"
+      "    ldr    sp,[r0]\n"
+      "    add    r0,r0,#4\n"
+      "    ldr    r1,[r0]\n"
+      "    bx     r1");
+#endif
 
 //*****************************************************************************
 // Main entry function

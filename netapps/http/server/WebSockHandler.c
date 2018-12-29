@@ -194,6 +194,10 @@ int WSCore_DataRecv(UINT16 uConnection,struct HttpBlob * pData)
 		}
 
 		PayloadData = (char *)malloc(PayloadLength);
+		if(PayloadData == NULL)
+		{
+			return 0;
+		}
 		memset(PayloadData,'\0',PayloadLength);
 		GlobRecvBuf = PayloadData;
 		GlobPayloadLen = PayloadLength;
@@ -385,7 +389,7 @@ int WSCore_DataSend(UINT16 uConnection, struct HttpBlob PayLoad, UINT8 Opcode)
 void WSStatusString(UINT32 WS_Status, struct HttpBlob* status)
 {
 	HttpString_utoa(WS_Status, status);
-	struct HttpBlob blob;
+	struct HttpBlob blob = {0, NULL};
     switch (WS_Status)
     {
     case WS_STATUS_OK:

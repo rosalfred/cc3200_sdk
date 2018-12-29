@@ -63,7 +63,7 @@ define region SRAM = mem:[from 0x20000000 to 0x2002FFFF];
 else
 {
 // SRAM size of 240KB for CC3200 ES 1.33 device
-define region SRAM = mem:[from 0x20004000 to 0x2003C000];
+define region SRAM = mem:[from 0x20004000 to 0x2003FFFF];
 }
 
 //

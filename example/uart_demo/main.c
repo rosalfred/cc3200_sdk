@@ -74,7 +74,7 @@
 //*****************************************************************************
 //                          MACROS                                  
 //*****************************************************************************
-#define APPLICATION_VERSION  "1.1.0"
+#define APPLICATION_VERSION  "1.1.1"
 #define APP_NAME             "UART Echo"
 #define CONSOLE              UARTA0_BASE
 #define UartGetChar()        MAP_UARTCharGet(CONSOLE)

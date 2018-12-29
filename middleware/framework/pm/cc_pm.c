@@ -264,8 +264,15 @@ static void enter_into_S3(void)
         
         BACK_UP_ARM_REGISTERS(); /* Core registers and code is in assembly */         
 
-        pform->pm_ops->enter_S3(resume_from_S3, 
-                                vault_arm_registers.psp/*save_restore[1]*/);
+        /* In OS mode psp has to be saved*/
+        /* In NON-OS mode msp has to be saved */
+        if(vault_arm_registers.control == 0){
+        	pform->pm_ops->enter_S3(resume_from_S3,
+        							vault_arm_registers.msp);
+        }else{
+        	pform->pm_ops->enter_S3(resume_from_S3,
+        	        				vault_arm_registers.psp);
+        }
 
         /* Introducing delays to facilitate CPU to fade away ........ */
         asm(" NOP"); asm(" NOP"); asm(" NOP"); asm(" NOP"); asm(" NOP"); 

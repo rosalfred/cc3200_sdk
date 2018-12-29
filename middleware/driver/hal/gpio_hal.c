@@ -144,14 +144,17 @@ i32 cc_gpio_init(const struct cc_gpio_config *gpio_info)
 
         for(loopcnt = 0; loopcnt < MAX_GPIO_PORTS; loopcnt++) {
                 port_info = &gpio_ctrl->port_details[loopcnt].port_info;
-                /* Copy the platform specific data */
-                memcpy(port_info,
-                        &gpio_info->port_info[loopcnt],
-                        sizeof(struct gpio_port_info));
-                /* Register with system INTC for irqvec_id */
-                register_isr(port_info->irqvec_id, 
-                        gpio_interrupt_handler, 
-                        (void *)port_info);
+                
+                if(gpio_info->port_info[loopcnt].module_id != 0) {
+                    /* Copy the platform specific data */
+                    memcpy(port_info,
+                            &gpio_info->port_info[loopcnt],
+                            sizeof(struct gpio_port_info));
+                    /* Register with system INTC for irqvec_id */
+                    register_isr(port_info->irqvec_id, 
+                            gpio_interrupt_handler, 
+                            (void *)port_info);
+                }
         }
         
         gpio_ctrl->drv_notify_cb = gpio_info->drv_notify_cb;

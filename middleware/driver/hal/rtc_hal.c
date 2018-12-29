@@ -39,20 +39,33 @@
 #include "prcm.h"
 #include "rtc_hal.h"
 
-static sys_irq_enbl enbl_irqc;
-static sys_irq_dsbl dsbl_irqc;
+static sys_irq_enbl enbl_irqc;              /* Construct to enable  system IRQ */
+static sys_irq_dsbl dsbl_irqc;              /* Construct to disable system IRQ */
 
 struct hw_rtc64 {
 
         u32                    base_addr;
-        u32                    freq_hz;
+        u32                    freq_hz;     /* Operating frequency of RTC HW   */
 
         cc_cb_fn               timeout_cb;
         cc_hndl                cb_param;
 
         void                   (*set_irq)(void);
 
-        bool                   has_alarm;
+        /* RTC is in a slow domain and access time to RTC hardware from software
+           (in fast domain) is considerable. Therefore, to reduce overall delays,
+           an alternative mechanism of calculating RTC value without reading the
+           slow domain has been provided. Assert the flag "do not read hardware"
+           - 'dont_rdhw = true' to use this alternative mechanism.
+
+           However, in this 'SW' mechanism, the slow domain hardware is still
+           accessed to "write" the RTC and the alarm values.
+        */ 
+        bool                   dont_rdhw;   /* True: use SW mechanism for RTC */
+        struct u64_time        ref_value;   /* SW: not actual RTC but the ref */
+        struct u64_time        alarm_val;   /* SW: user's actual alarm value  */
+
+        bool                   has_alarm;   /* An alarm has been configured.  */
 };
 
 static struct hw_rtc64 rtc64, *rtc = NULL;
@@ -63,31 +76,156 @@ static struct hw_rtc64 rtc64, *rtc = NULL;
 #define U16MS_CYCLES(msec)	((msec *1024)/1000)
 #define CYCLES_U16MS(cycles)	((cycles *1000)/ 1024)
 
-static inline void rtc_alarm_wr(const struct u64_time *alarm)
+/* Read RTC counter in the fast domain through some system specific mechanisms */
+static void rtc_fast_domain_counter_rd(struct u64_time *counter)
+{
+        u64 eval_count = 0;
+        u64 rtc_count1,rtc_count2,rtc_count3 = 0;
+        u32 itr = 0;
+
+#define BRK_IF_RTC_CTRS_ALIGN(c2, c1)           \
+        if(c2 - c1 <= 1) {                      \
+                itr++;                          \
+                break;                          \
+        }
+
+        do {
+                rtc_count1 = PRCMSlowClkCtrFastGet();
+                rtc_count2 = PRCMSlowClkCtrFastGet();
+                rtc_count3 = PRCMSlowClkCtrFastGet();
+                itr = 0;
+                
+                BRK_IF_RTC_CTRS_ALIGN(rtc_count2, rtc_count1);
+                BRK_IF_RTC_CTRS_ALIGN(rtc_count3, rtc_count2);
+                BRK_IF_RTC_CTRS_ALIGN(rtc_count3, rtc_count1);
+
+                /* Consistent values in two consecutive reads implies a correct
+                   value of the counter. Do note, the counter does not give the
+                   calendar time but a hardware that ticks upwards continuously.
+                   The 48-bit counter operates at 32,768 HZ. */
+        } while(1);
+
+        eval_count = (1 == itr)? rtc_count2 : rtc_count3;
+
+        /* Counter resolution is 32768 Hz: need to get secs, nsec */
+        eval_count  >>= 5; /* Div by 32 for resolution of 1024 Hz */ 
+        counter->secs = eval_count >> 10; /* sec: Divide by 1024  */
+        counter->nsec = eval_count & 0x3FF;
+        if(counter->nsec != 0){
+            /* accounting for the 1ms of lost precision during conversion */
+            counter->nsec += 1;
+        }
+        counter->nsec = U16MS_U32NS(CYCLES_U16MS(counter->nsec));
+        
+
+        return;
+}
+
+static void rtc_alarm_wr(const struct u64_time *alarm)
 {
         MAP_PRCMRTCMatchSet(alarm->secs,
-        					U16MS_CYCLES(U32NS_U16MS(alarm->nsec)));
+                            U16MS_CYCLES(U32NS_U16MS(alarm->nsec)));
+
+        /* Keep a copy to avoid costly HW read accesses */
+        if(rtc->dont_rdhw) {
+                rtc->alarm_val.secs = alarm->secs;
+                rtc->alarm_val.nsec = alarm->nsec;
+        }
+        
+        return;
 }
 
 static void rtc_alarm_rd(struct u64_time *alarm)
 {
         u16 msec_cycles = 0;
-        
-        MAP_PRCMRTCMatchGet(&alarm->secs, &msec_cycles);
-        alarm->nsec = U16MS_U32NS(CYCLES_U16MS(msec_cycles));
+
+        if(rtc->dont_rdhw) {
+                alarm->secs = rtc->alarm_val.secs;
+                alarm->nsec = rtc->alarm_val.nsec;
+        } else {
+                MAP_PRCMRTCMatchGet(&alarm->secs, &msec_cycles);
+                if(msec_cycles != 0){
+                		/* accounting for the 1ms of lost precision during conversion */
+                         msec_cycles += 1;
+                }
+                alarm->nsec = U16MS_U32NS(CYCLES_U16MS(msec_cycles));
+        }
 }
 
-static inline void rtc_value_wr(const struct u64_time *value)
+static void rtc_ref_value_wr(const struct u64_time *value)
+{
+        struct u64_time counter, *clk_ctr;
+        clk_ctr = &counter;
+
+        rtc_fast_domain_counter_rd(clk_ctr);
+        util_u32_nsec_sub(value->nsec, clk_ctr->nsec, &rtc->ref_value);
+        rtc->ref_value.secs += value->secs - clk_ctr->secs;
+
+        return;
+}
+
+#define RTC_ACCESS_TIME_NSEC    5000000  /* Time to access slow domain RTC HW */
+
+/* Access to hardware (RTC) is slow. So, try a better estimate of RTC counter */
+static void hw_access_time_addup(struct u64_time *value)
+{
+        struct u64_time input_value;
+        struct u64_time access_time;
+
+        input_value.secs = value->secs;
+        input_value.nsec = value->nsec;
+
+        access_time.secs = 0;
+        access_time.nsec = RTC_ACCESS_TIME_NSEC;
+
+        util_u64_time_add(&input_value, &access_time, value);
+
+        return;
+}
+
+static void rtc_value_wr(const struct u64_time *value)
 {
         MAP_PRCMRTCSet(value->secs, U16MS_CYCLES(U32NS_U16MS(value->nsec)));
+
+        /* Now, maintain a reference to the RTC Value outside hardware */
+        if(rtc->dont_rdhw) {
+                struct u64_time provided_val;
+                struct u64_time *adjusted_val = &provided_val;
+
+                provided_val.secs = value->secs;
+                provided_val.nsec = value->nsec;
+
+                hw_access_time_addup(adjusted_val);
+
+                rtc_ref_value_wr(adjusted_val);
+        }
+
+        return;
 }
 
 static void rtc_value_rd(struct u64_time *value)
 {
-        u16 msec_cycles = 0;
-        
-        MAP_PRCMRTCGet(&value->secs, &msec_cycles);
-        value->nsec = U16MS_U32NS(CYCLES_U16MS(msec_cycles));
+        if(rtc->dont_rdhw) {
+                /* Use the reference maintained outside hardware for RTC Val */
+                struct u64_time counter, *clk_ctr;
+                clk_ctr = &counter;
+                rtc_fast_domain_counter_rd(clk_ctr);
+                util_u64_time_add(&rtc->ref_value, clk_ctr, value);
+        } else {
+                u16 msec_cycles = 0;
+
+                MAP_PRCMRTCGet(&value->secs, &msec_cycles);
+                if(msec_cycles != 0){
+                		/* accounting for the 1ms of lost precision during conversion */
+                		msec_cycles += 1;
+                }
+                value->nsec = U16MS_U32NS(CYCLES_U16MS(msec_cycles));
+
+                /* Try to provide a value adjusted for hardware access time.*/
+                hw_access_time_addup(value); 
+        }
+
+        return;
 }
 
 /* 
@@ -97,16 +235,16 @@ static void rtc_value_rd(struct u64_time *value)
 
    Return true for valid alarm.
 */
-static bool is_valid_alarm(const struct u64_time *alarm, 
-                           const struct u64_time *value,
-                           u32 *borrow_nsec)
+static bool is_alarm_cfg_valid(const struct u64_time *alarm, 
+                               const struct u64_time *clock,
+                               u32 *borrow_nsec)
 {
         u32 borrow = 0;
 
-        if(alarm->nsec <= value->nsec)
+        if(alarm->nsec <= clock->nsec)
                 borrow = 1;
         
-        if(alarm->secs < value->secs + borrow)
+        if(alarm->secs < clock->secs + borrow)
                 return false; /* Expired: Alarm-64 is less than Value-64 */
         
         if(borrow_nsec)
@@ -124,15 +262,17 @@ static bool hwt64_is_running(cc_hndl hndl)
 static i32 set_alarm(struct u64_time *alarm)
 {
         struct u64_time value;
-
-        rtc_value_rd(&value);
-        if(NULL == alarm){
+        if(NULL == alarm)
                 return -1;
-        }
-        if(false == is_valid_alarm(alarm, &value, NULL))
-                return -1; /* Perhaps, alarm specified is in past */
-        
-        rtc_alarm_wr(alarm);        
+
+        rtc_value_rd(&value);         /* An estimated RTC value at the moment */
+        hw_access_time_addup(&value); /* Min alarm value to trigger next IRQ  */
+
+        if(true == is_alarm_cfg_valid(alarm, &value, NULL))
+                rtc_alarm_wr(alarm);  /* User alarm is greater than Min Value */
+        else
+                rtc_alarm_wr(&value); /* User alarm in past, fall-back on Min */
+
         rtc->has_alarm = true;
 
         MAP_PRCMIntEnable(PRCM_INT_SLOW_CLK_CTR);
@@ -185,10 +325,11 @@ static i32 hwt64_update_alarm(cc_hndl hndl, struct u64_val *expires)
 
 static i32 hwt64_create_alarm(cc_hndl hndl, struct u64_val *expires,
                               enum cc_hw_timer_mode mode)
-{		u32 intr_mask;
+{	
+        u32 intr_mask;
         i32 rv = -1;
         struct hw_rtc64 *rtc = (struct hw_rtc64*) hndl;
-
+        
         intr_mask = dsbl_irqc();
 
         if(rtc && (false == rtc->has_alarm)) {
@@ -203,8 +344,11 @@ static i32 hwt64_create_alarm(cc_hndl hndl, struct u64_val *expires,
 static i32 clr_alarm(void)
 {
         MAP_PRCMIntDisable(PRCM_INT_SLOW_CLK_CTR);
-        
-        rtc->has_alarm = false;
+        MAP_PRCMIntStatus();
+
+        rtc->has_alarm  = false;
+        rtc->alarm_val.secs = 0;
+        rtc->alarm_val.nsec = 0;
 
         return 0;
 }
@@ -257,11 +401,11 @@ static i32 time_to_alarm(struct u64_time *tta)
         rtc_alarm_rd(&alarm);
         rtc_value_rd(&value);
 
-        if(false == is_valid_alarm(&alarm, &value, &borrow))
+        if(false == is_alarm_cfg_valid(&alarm, &value, &borrow))
                 return -1; /* Invalid means Expired */
 
-        tta->nsec = 
-                borrow? alarm.nsec + ~value.nsec + 1 : alarm.nsec - value.nsec;
+        tta->nsec = borrow? alarm.nsec + ~value.nsec + 1 :
+                            alarm.nsec - value.nsec;
         
         tta->nsec = alarm.secs - value.secs - borrow;
         
@@ -331,7 +475,7 @@ i32 cc_rtc_get(struct u64_time *rtc_val)
 
 static u32 hwt64_get_rollovers(cc_hndl hndl)
 {
-        /* Not expecting 64bit RTC to rollover in life-time of product */
+        /* Not expecting 48bit RTC to rollover any time soon */
         return ((struct hw_rtc64*) hndl == rtc)? 0 : 0xFFFFFFFF;
 }
 
@@ -342,8 +486,28 @@ static u32 hwt64_get_frequency(cc_hndl hndl)
 
 i32 cc_rtc_set(struct u64_time *rtc_val)
 {
-        rtc_value_wr(rtc_val);
-        rtc->set_irq();
+        if(rtc) {
+                rtc_value_wr(rtc_val);
+                rtc->set_irq();
+                return 0;
+        }
+
+        return -1;
+}
+
+i32 cc_rtc_fast_read_config(bool enable)
+{
+        if(NULL == rtc)
+                return -1;
+
+        if(enable) {
+                struct u64_time rtc_val;
+                rtc_value_rd(&rtc_val);
+                rtc_ref_value_wr(&rtc_val);
+                rtc->dont_rdhw = true;
+        } else {
+                rtc->dont_rdhw = false;
+        }
 
         return 0;
 }
@@ -388,7 +552,14 @@ i32 cc_rtc_init(const struct hw_timer_cfg *cfg)
         rtc->base_addr  = cfg->base_addr;
         rtc->freq_hz    = cfg->freq_hz; 
         rtc->set_irq    = cfg->set_irq;
+        rtc->dont_rdhw  = false;
+        rtc->alarm_val.secs  = 0;
+        rtc->alarm_val.nsec  = 0;
+        rtc->ref_value.secs  = 0;
+        rtc->ref_value.nsec  = 0;
+
         rtc->has_alarm  = false;
+
 
         enbl_irqc       = cfg->enbl_irqc;
         dsbl_irqc       = cfg->dsbl_irqc;
@@ -406,7 +577,6 @@ void cc_rtc_isr(void)
 
         /* Read the interrupt status, also clears the status */
         status = MAP_PRCMIntStatus();
-        UNUSED(status);
         if(rtc == NULL){
                 return;
         }
@@ -417,13 +587,16 @@ void cc_rtc_isr(void)
         */
         if(false == rtc->has_alarm)
                 return; /* Race condition: alarm was cleared interim, ignore */
+
+        status = dsbl_irqc();
         
         rtc_alarm_rd(&alarm);
         rtc_value_rd(&value);
+        enbl_irqc(status);
 
-        if(true == is_valid_alarm(&alarm, &value, NULL))
+        if(true == is_alarm_cfg_valid(&alarm, &value, NULL)){
                 return; /* Race condition: ISR for old / stale alarm, ignore */
-
+        }
         rtc->has_alarm = false; /* Valid ISR: alarm is about to be processed */
 
         /* This ISR is for the active alarm, therefore, handle it */

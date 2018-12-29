@@ -101,35 +101,20 @@ static i32 hwt_is_running(struct hwt_info *hwt)
 
         return hwt_ops->is_running(hwt->hndl);
 }
-#if 0
-static i32 hwt_get_remaining(struct hwt_info *hwt, struct u64_val *remaining)
-{
-        struct hw_timer_ops *hwt_ops = hwt->ops;
 
-        return  hwt->hw_64bits? 
-                hwt_ops->get_remaining64(hwt->hndl, remaining) :
-                hwt_ops->get_remaining32(hwt->hndl, &remaining->lo_32);
-
-}
-#endif
 static i32 hwt_get_current(struct hwt_info *hwt, struct u64_val *current)
 {
         struct hw_timer_ops *hwt_ops = hwt->ops;
-
-        i32 rv = hwt->hw_64bits?
-                hwt_ops->get_current64(hwt->hndl, current) :
-                hwt_ops->get_current32(hwt->hndl, &current->lo_32);
-
-        current->hi_32 += hwt_ops->get_rollovers(hwt->hndl);
+        i32 rv = -1;
+        
+        if(hwt->hw_64bits)
+                rv = hwt_ops->get_current64(hwt->hndl, current);
+        else {
+                rv = hwt_ops->get_current32(hwt->hndl, &current->lo_32);
+                current->hi_32 = hwt_ops->get_rollovers(hwt->hndl);
+        }
 
         return rv;
-}
-
-static i32 hwt_get_rollovers(struct hwt_info *hwt)
-{
-        struct hw_timer_ops *hwt_ops = hwt->ops;
-        
-        return hwt_ops->get_rollovers(hwt->hndl);
 }
 
 static i32 hwt_get_frequency(struct hwt_info *hwt)
@@ -157,6 +142,7 @@ struct sw_timer {
 #define SW_TIMER_PERIODIC   0x00000001
 #define SW_TIMER_HW_SCHED   0x00000002
 #define SW_TIMER_ALLOCATE   0x00000004
+#define SW_TIMER_ACTIVATE   0x00000008
 
         u32                   flags;       /* Flags to manage SW Timer state */
 
@@ -184,6 +170,14 @@ static inline void set_periodic(struct sw_timer *swt, bool periodic)
                 swt->flags &= ~SW_TIMER_PERIODIC;
 }
 
+static inline void set_activate(struct sw_timer *swt, bool activate)
+{
+        if(activate)
+                swt->flags |=  SW_TIMER_ACTIVATE;
+        else
+                swt->flags &= ~SW_TIMER_ACTIVATE;
+}
+
 static inline bool is_scheduled(struct sw_timer *swt)
 {
         return (swt->flags & SW_TIMER_HW_SCHED)? true : false;
@@ -196,15 +190,7 @@ static inline void set_scheduled(struct sw_timer *swt, bool sched)
         else
                 swt->flags &= ~SW_TIMER_HW_SCHED;
 }
-#if 0
-static inline void set_user_status(struct sw_timer *swt, bool used)
-{
-        if(used)
-                swt->flags |=  SW_TIMER_ALLOCATE;
-        else
-                swt->flags &= ~SW_TIMER_ALLOCATE;
-}
-#endif
+
 static inline void set_alloc_status(struct sw_timer *swt, bool alloc)
 {
         if(alloc)
@@ -220,8 +206,7 @@ static inline bool is_alloc_only(struct sw_timer *swt)
 
 static inline bool has_started(struct sw_timer *swt)
 {
-        return  (swt->flags &  SW_TIMER_ALLOCATE) && 
-                (swt->flags != SW_TIMER_ALLOCATE)? true : false;
+        return !is_alloc_only(swt);
 }
 
 /*-----------------------------------------------------------------------------
@@ -229,29 +214,9 @@ static inline bool has_started(struct sw_timer *swt)
  *----------------------------------------------------------------------------*/
 
 /* Returns: 1 for val1 > val2; 0 for val1 = val2; -1 for val1 < val2 */
-static i32 cmp_u32(u32 val1, u32 val2)
-{
-        i32 rv = -1;
-
-        if(val1 == val2)
-                rv = 0;
-        else if(val1 > val2)
-                rv = 1;
-
-        return rv;
-}
-
-/* Returns: 1 for val1 > val2; 0 for val1 = val2; -1 for val1 < val2 */
 static i32 cmp_u64(struct u64_val *u64_val1, struct u64_val *u64_val2)
 {
-        i32 rv = -1;
-
-        if(u64_val1->hi_32 == u64_val2->hi_32)
-                rv = cmp_u32(u64_val1->lo_32, u64_val2->lo_32);
-        else if(u64_val1->hi_32 > u64_val2->hi_32)
-                rv = 1;
-
-        return rv;
+        return util_u64_data_cmp(u64_val1, u64_val2);
 }
 
 #define NSEC_VAL_FOR_1SEC   1000000000
@@ -290,7 +255,7 @@ i32 calc_ticks_interval(struct hwt_info *hwt, struct u64_time *time_u64,
         if(time_u64->nsec > (NSEC_VAL_FOR_1SEC - 1))
                 return -1; /* Value exceeds a sec */
 
-        tmp64 = time_u64->nsec * hwt_freq;
+        tmp64 = ((u64)time_u64->nsec) * hwt_freq;
         sw_interval->lo_32 = tmp64 / NSEC_VAL_FOR_1SEC;
 
         return  hwt_is_64bits(hwt)? 
@@ -300,103 +265,46 @@ i32 calc_ticks_interval(struct hwt_info *hwt, struct u64_time *time_u64,
                                         sw_interval);
 }
 
-static void calc_hwt_expiry_nsec_u32(struct u64_val *hwt_current,
-									 struct u64_val *sw_interval,
-                                     struct u64_val *hwt_expires)
-{
-		/* 1 sec overflow check: v1 nsec + v2 nsec > 1000000000 nanoseconds */
-        if(hwt_current->lo_32 + sw_interval->lo_32 >= NSEC_VAL_FOR_1SEC) {
-                u32 exceeds = hwt_current->lo_32 + sw_interval->lo_32 - NSEC_VAL_FOR_1SEC;
-                hwt_expires->lo_32  = exceeds;
-                hwt_expires->hi_32 += 1;                        /* Carry flag */
-        } else {
-                /* Simple 32bits addition without any carry flag and overflow */
-                hwt_expires->lo_32  = hwt_current->lo_32 +  sw_interval->lo_32;
-        }
-
-        return;
-}
-
-static void calc_hwt_expiry_secs_u64(struct u64_val *hwt_current, 
-                                     struct u64_val *sw_interval, 
-                                     struct u64_val *hwt_expires)
-{
-        calc_hwt_expiry_nsec_u32(hwt_current, sw_interval, hwt_expires);
-        
-        hwt_expires->hi_32 += hwt_current->hi_32 + sw_interval->hi_32;
-
-        return;
-}
-
 static void calc_hwt_expiry_secs(struct hwt_info *hwt,
-                                 struct u64_val  *hwt_current, 
+                                 struct u64_val  *hwt_current,
                                  struct u64_val  *sw_interval,
                                  struct u64_val  *hwt_expires)
-                                 
 {
-        hwt_is_64bits(hwt)? 
-                calc_hwt_expiry_secs_u64(hwt_current, sw_interval, hwt_expires) :
-                calc_hwt_expiry_nsec_u32(hwt_current, sw_interval, hwt_expires);
+        struct u64_time time_expiry = {0, 0};
 
-        return;
-}
+        util_u32_nsec_add(hwt_current->lo_32,
+                          sw_interval->lo_32,
+                          &time_expiry);
 
-static void calc_hwt_expiry_tick_u32(struct u64_val *hwt_current, 
-                                     struct u64_val *sw_interval, 
-                                     struct u64_val *hwt_expires)
-{
-        /* 32bit overflow check: v1 + v2 > 0xFFFFFFFF => v1 > 0xFFFFFFFF - v2 */
-        if(hwt_current->lo_32 > ~sw_interval->lo_32) {
-                /* exceeds by => v1 + v2 - (0xFFFFFFFF + 1) = v1 - (~v2 + 1)  */
-                u32 exceeds = hwt_current->lo_32 - ~sw_interval->lo_32 - 1;
-                hwt_expires->lo_32  = exceeds;
-                hwt_expires->hi_32 += 1;                        /* Carry flag */
-        } else {
-                /* Simple 32bits addition without any carry flag and overflow */
-                hwt_expires->lo_32  = hwt_current->lo_32 +  sw_interval->lo_32;
-        }
-        
-        return;
-}
-
-static void calc_hwt_expiry_tick_u64(struct u64_val *hwt_current, 
-                                     struct u64_val *sw_interval, 
-                                     struct u64_val *hwt_expires)
-{
-        calc_hwt_expiry_tick_u32(hwt_current, sw_interval, hwt_expires);
+        hwt_expires->lo_32  = time_expiry.nsec;
+        hwt_expires->hi_32  = time_expiry.secs;
 
         hwt_expires->hi_32 += hwt_current->hi_32 + sw_interval->hi_32;
-
+        
         return;
 }
 
 static void calc_hwt_expiry_tick(struct hwt_info *hwt,
-                                 struct u64_val  *hwt_current, 
+                                 struct u64_val  *hwt_current,
                                  struct u64_val  *sw_interval,
                                  struct u64_val  *hwt_expires)
 {
-        hwt_is_64bits(hwt)? 
-                calc_hwt_expiry_tick_u64(hwt_current, sw_interval,
-                                         hwt_expires):
-                calc_hwt_expiry_tick_u32(hwt_current, sw_interval,
-                                         hwt_expires);
+        util_u64_data_add(hwt_current, sw_interval, hwt_expires);
 
         return;
 }
 
 static void calc_hwt_expiry(struct hwt_info *hwt,
-                           struct u64_val  *hwt_current, 
-                           struct u64_val  *sw_interval,
-                           struct u64_val  *hwt_expires)
+                            struct u64_val  *hwt_current, 
+                            struct u64_val  *sw_interval,
+                            struct u64_val  *hwt_expires)
 {
-        hwt_expires->hi_32 = hwt_get_rollovers(hwt);
-
         hwt_has_abs_time(hwt)?
                 calc_hwt_expiry_secs(hwt, hwt_current, sw_interval,
                                      hwt_expires):
                 calc_hwt_expiry_tick(hwt, hwt_current, sw_interval,
                                      hwt_expires);
-
+        
         return;
 }
 
@@ -406,6 +314,8 @@ static void calc_hwt_expiry(struct hwt_info *hwt,
 static void insert_ordered_expiry(struct sw_timer *elem, struct sw_timer **list)
 {
         struct sw_timer *node = *list, *prev = NULL;
+
+        elem->next = NULL;  /* Remove stale reference / info, if any */
 
         if(NULL == node) {  /* First user request for the  HW timer */
                 *list = elem;
@@ -459,70 +369,73 @@ static i32 sched_timer_if_new(struct sw_timer *head)
         return rv;
 }
 
-static i32 setup_timer_exec(struct sw_timer *swt, u32 options) 
+static i32 setup_timer_exec(struct sw_timer *swt, struct u64_val *hwt_current,
+                            bool has_expval) 
 {
-        /* Step 1: Use absolute expiry time, if provided. Otherwise .....
-           Step 2: Calculate absolute expiry time in terms of HW counter.
-           
-           TODO: Seems that providing both flags and time_u64 may be redundant
-        */
-
         struct hwt_info *hwt = swt->hwt_obj;
+        struct u64_val u64_current = {0, 0};
 
-        if(options & OPT_TIME_ABS_VALUE) {
-                /* Step 1: Use absolute time, if it has been provided */
-                swt->hwt_expires.hi_32 = swt->sw_interval.hi_32;
-                swt->hwt_expires.lo_32 = swt->sw_interval.lo_32;
-        } else {
-                /* Step 2. Calculate HW expiry time using interval .. */
-                struct u64_val hwt_current = {0, 0}; /* initial value */
+        if(NULL == hwt_current) {
+                /* No ref provided for current value, so read it from HWT */
+                hwt_current = &u64_current;
 
+                /* Read HWT (current) counter value only if it is running */
                 if((hwt_is_running(hwt) || hwt_has_abs_time(hwt)) && 
-                   (-1 == hwt_get_current(hwt, &hwt_current)))
+                   (-1 == hwt_get_current(hwt, hwt_current)))
                                 return -1;
-
-                calc_hwt_expiry(hwt, &hwt_current, 
-                                &swt->sw_interval,
-                                &swt->hwt_expires);
         }
+
+        if(false == has_expval)
+                calc_hwt_expiry(hwt, hwt_current, &swt->sw_interval,
+                                &swt->hwt_expires);
         
         insert_ordered_expiry(swt, &hwt->used_list);
 
         sched_timer_if_new(hwt->used_list);
 
+        set_activate(swt, true);
+
         return 0;
 }
 
-static i32 setup_timer_interval(struct sw_timer *swt, struct u64_time *time_u64)
+static i32 estbl_timer_interval(struct sw_timer *swt, struct u64_time *time_u64)
 {
         struct hwt_info *hwt = swt->hwt_obj;
 
-        if(false == hwt_has_abs_time(hwt)) {
-                /* Convert time specified by user into ticks for HW Timer */
-                if(-1 == calc_ticks_interval(hwt, time_u64, &swt->sw_interval))
-                        return -1;
-        } else {
-                /* If HWT has support for real-time, work with user info */
+        if(hwt_has_abs_time(hwt)) {
+                /* Work with user info, if HWT supports real-time */
                 swt->sw_interval.hi_32 = time_u64->secs;
                 swt->sw_interval.lo_32 = time_u64->nsec;
+                return 0;
         }
         
-        return 0;
+        /* Convert time specified by user into ticks for HW Timer */
+        return calc_ticks_interval(hwt, time_u64, &swt->sw_interval);
 }
 
 static i32 timer_start(struct sw_timer *swt, struct u64_time *time_u64,
                        u32 options)
 {
+        bool has_expval = false;
+
+        /* Check if SWT has been already activated, if yes can't use */ 
         if(false == is_alloc_only(swt))
                 return -1; /* Not only allocated but started as well */
         
-        if((-1 == setup_timer_interval(swt, time_u64))  ||
-           (-1 == setup_timer_exec(swt, options)))
-                return -1;
+        if(options & OPT_TIME_ABS_VALUE) {
+                /* Absolute expiry time has been provided, so use it */
+                swt->hwt_expires.hi_32 = time_u64->secs;
+                swt->hwt_expires.lo_32 = time_u64->nsec;
+                has_expval = true;
+        } else {
+                /* Need to establish (expiry) interval for this SWT  */
+                if(-1 == estbl_timer_interval(swt, time_u64))
+                        return -1;
+        }
 
-        set_periodic(swt, options & OPT_TIMER_PERIODIC ? true : false);
+        set_periodic(swt, options & OPT_TIMER_PERIODIC? true : false);
 
-        return 0;
+        return setup_timer_exec(swt, NULL, has_expval);
 }
 
 static bool has_valid_opts(struct hwt_info *hwt, u32 options)
@@ -531,7 +444,7 @@ static bool has_valid_opts(struct hwt_info *hwt, u32 options)
         if((OPT_TIMER_PERIODIC & options) && (OPT_TIME_ABS_VALUE & options))
                 return false; 
 
-        /* A request for absolute time has to be supported on HW */
+        /* A request for absolute time has to be supported in timer, HWT */
         if((options & OPT_TIME_ABS_VALUE) && !hwt_has_abs_time(hwt))
                 return false;
 
@@ -555,7 +468,7 @@ i32 cc_timer_start(cc_hndl hndl, struct u64_time *time_u64, u32 options)
         time64_ref.nsec = time_u64->nsec;
 
         if(IS_LRT_TIMER(swt->hwt_obj)) {
-                /* reducing the precision to milliseconds to avoid floating point ops */
+                /* Reducing precision to millisec to avoid floating point ops */
                 time64_ref.nsec = U16MS_U32NS(U32NS_U16MS(time_u64->nsec));
         }
 
@@ -583,6 +496,7 @@ static i32 remove_elem(struct sw_timer *elem, struct sw_timer **list)
                         else
                                 prev->next = node->next; 
                         
+                        elem->next = NULL; /* Reset */
                         rv = 0;
                         break;  /* Exit while loop */
                 }
@@ -598,12 +512,13 @@ static i32 timer_stop(struct sw_timer *swt)
 {
         struct hwt_info *hwt = swt->hwt_obj;
 
-        if(0 != remove_elem(swt, &hwt->used_list)) {
-                return -1;
-        }
+        if(0 != remove_elem(swt, &hwt->used_list))
+                return -1; /* Did not find SWT in 'used_list' */
 
+        /* Clear all run-time flags */
         set_scheduled(swt, false);
         set_periodic(swt, false);
+        set_activate(swt, false);
 
         if(NULL != hwt->used_list)
                 sched_timer_if_new(hwt->used_list);
@@ -628,58 +543,94 @@ i32 cc_timer_stop(cc_hndl hndl)
         return rv;
 }
 
-static void handle_expired_timer(struct sw_timer *swt)
+/* Called in the interrupt context of the HWT */
+static void handle_expired_swt(struct sw_timer *swt)
 {
         set_scheduled(swt, false);
 
-        /* Invoke user's callback routine */
+        /* Invoke and service user's callback routine */
         if(swt->timeout_cb)
                 swt->timeout_cb(swt->cb_param);
         
-        /* Period timer: Set-up next iteration */
-        if(true == is_periodic(swt))
-                setup_timer_exec(swt, 0);
-
-        return;
-}
-
-/* Called in the interrupt context */
-static void process_timer_expiry(struct hwt_info *hwt)
-{
-        struct sw_timer *head = hwt->used_list;
-        
-        while(head) { /* Run through list to process all expired timers */
+        /* Period timer: Set-up next expiry iteration */
+        if(true == is_periodic(swt)) {
+                struct u64_val *p;
                 struct u64_val hwt_current;
+                u32 intr_mask = dsbl_irqc();
 
-                if(0 != hwt_get_current(head->hwt_obj, &hwt_current))
-                        goto handle_timer_expiry_exit1;
-                
-                if(0 > cmp_u64(&hwt_current, &head->hwt_expires))
-                        break; /* Timer is yet to reach expiry, so quit */
+                p = &swt->hwt_expires;
+                hwt_current.hi_32 = p->hi_32;
+                hwt_current.lo_32 = p->lo_32;
 
-                remove_elem(head, &hwt->used_list);
-
-                handle_expired_timer(head);
-
-                head = hwt->used_list;
+                setup_timer_exec(swt, &hwt_current,
+                                 false /* Do ExpVal */);
+                enbl_irqc(intr_mask);
+        } else {
+                /* Timer is not required to re-start. */
+                set_activate(swt, false);
         }
-        
-        if(head)
-                sched_timer_if_new(head);
-        else
-                hwt_stop(hwt);
-        
- handle_timer_expiry_exit1:
+
         return;
 }
 
-/* To be invoked by HAL */
+/* Called in the interrupt context of the HWT */
+static struct sw_timer *isolate_expired_swt_list(struct hwt_info *hwt)
+{
+        struct sw_timer *elem = NULL, *head = NULL, *tail = NULL;
+        struct u64_val hwt_current = {0, 0};
+
+        if(0 != hwt_get_current(hwt, &hwt_current))
+                return NULL;
+
+        /*** Watch out for assignment in the 'while' statement ***/
+        while(elem = hwt->used_list) {
+
+                if(0 > cmp_u64(&hwt_current, &elem->hwt_expires)) {
+                        /* SWT is yet to reach expiry, sched it  */
+                        sched_timer_if_new(elem);
+                        break;
+                }
+
+                /* Remove an expired SWT 'elem' from 'used_list' */
+                remove_elem(elem, &hwt->used_list);
+
+                if(NULL == head) head = elem;
+
+                if(tail)   tail->next = elem;
+
+                tail = elem;
+        }
+
+        return head; /* Head of list of expired SW-Timers (SWTs) */
+}
+
+/* To be invoked by HAL and in the interrupt context of CPU */
 static void timer_isr(cc_hndl cb_param)
 {
-        struct hwt_info *hwt  = (struct hwt_info*) cb_param;
-        
-        if(NULL != hwt)
-                process_timer_expiry(hwt);
+        struct hwt_info *hwt = (struct hwt_info*) cb_param;
+        struct sw_timer *swt_list = NULL;
+        u32 intr_mask = 0;
+
+        if(NULL == hwt)
+                return;
+
+        /* Lockout higher priority or nested IRQ(s) */
+        intr_mask = dsbl_irqc();
+        swt_list = isolate_expired_swt_list(hwt);
+        enbl_irqc(intr_mask);
+
+        while(swt_list) {
+                /* Run thru list of expireed SWT(s) */
+                struct sw_timer *swt = swt_list;
+                swt_list = swt_list->next;
+                handle_expired_swt(swt);
+        }
+
+        intr_mask = dsbl_irqc();
+        if(NULL == hwt->used_list)
+                /* No active SW-Timer, so stop HWT */
+                hwt_stop(hwt);
+        enbl_irqc(intr_mask);        
 
         return;
 }
@@ -715,7 +666,7 @@ cc_hndl cc_timer_create(struct cc_timer_cfg *cfg)
         swt->cb_param   = cfg->cb_param;
 
  cc_timer_create_exit2:
-        enbl_irqc(intr_mask); /* Enable  interrupts */
+        enbl_irqc(intr_mask);     /* Enable  interrupts */
 
  cc_timer_create_exit1:
 
@@ -726,21 +677,28 @@ i32 cc_timer_delete(cc_hndl hndl)
 {
         struct sw_timer *swt = (struct sw_timer*) hndl;
         u32 intr_mask;
+        i32 rv = -1;
 
-        if(NULL == swt || !is_alloc_only(swt))
-                return -1;
+        intr_mask = dsbl_irqc();
+
+        if((NULL == swt)                  ||
+           (false == is_alloc_only(swt)))
+                /* Timer is started; stop it first */
+                goto cc_timer_delete_exit1;
 
         set_alloc_status(swt, false);
         memset(swt, 0, sizeof(swt));
         swt->hwt_obj = NULL;
         swt->next    = NULL;
-        
-        intr_mask = dsbl_irqc();
+
         swt->next = free_list;
         free_list = swt;
+        rv        = 0;
+
+ cc_timer_delete_exit1:
         enbl_irqc(intr_mask);
 
-        return 0;
+        return rv;
 }
 
 static i32 sw_timers_init(void)
@@ -782,9 +740,10 @@ static i32 hw_timers_init(void)
 i32 cc_timer_module_init(struct cc_timer_setup *timer_setup)
 {
         if((NULL == timer_setup->enbl_irqc) || 
-                (NULL == timer_setup->dsbl_irqc)) {
+           (NULL == timer_setup->dsbl_irqc)) {
                 return -1;
         }
+
         enbl_irqc = timer_setup->enbl_irqc;
         dsbl_irqc = timer_setup->dsbl_irqc;
 

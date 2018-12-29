@@ -42,28 +42,31 @@
 #include "hw_types.h"
 #include "timer.h"
 
-/* To be removed */
-/*
-#define TIMER_TIMA_TIMEOUT 1
-#define TIMER_TIMA_MATCH   2
-#define TIMER_CFG_A_ONE_SHOT 1
-#define TIMER_CFG_PERIODIC 1
-#define TIMER_CFG_PERIODIC_UP 2
-#define TIMER_A              7
-*/
-/* End remove */
 
 static sys_irq_enbl enbl_irqc;
 static sys_irq_dsbl dsbl_irqc;
 static u32 sys_flags = 0;
 
+/* All the "time-out" configurations made in the hardware is in terms
+   of operational "ticks" and not in absolute time. The caller must
+   convert the absolute time into the hardware ticks prior to calling
+   these API(s). Tick = Freq x Time.
+*/
 struct hw_timer32 {
         
         u32                    base_addr;
         u32                    freq_hz;
         
         u32                    irq_mask;
-        u32                    n_rollovers;
+
+        /* Assert to indicate that SW has used an
+           additional rollover count ahead of the
+           actual occurence in hardware. This is
+           done to avoid SW / HW race-conditions.
+           Applicable only in MONOTONE mode. */
+        bool                   sw_early_ro;
+        u32                    n_rollovers; 
+        struct u64_val         mtone_expy;
 
         cc_cb_fn               timeout_cb;
         cc_hndl                cb_param;
@@ -72,6 +75,8 @@ struct hw_timer32 {
         
         struct hw_timer32      *next;
 };
+
+#define HWT32_ACCESS_CYCLES 5000 /* Gauges SW processing times */
 
 static inline void hwt32_set_op_mode(struct hw_timer32     *hwt,
                                      enum cc_hw_timer_mode mode)
@@ -106,7 +111,7 @@ static i32 hwt32_config_one_shot(struct hw_timer32 *hwt, u32 expires)
         MAP_TimerConfigure(hwt->base_addr, TIMER_CFG_A_ONE_SHOT);
         MAP_TimerLoadSet(hwt->base_addr, TIMER_A, expires); /* Countdown value */
         
-        hwt->irq_mask = TIMER_TIMA_TIMEOUT;  /* IRQ for counter reaching 0 */
+        hwt->irq_mask = TIMER_TIMA_TIMEOUT; /* IRQ: when down counter reaches 0*/
 
         return 0;
 }
@@ -115,9 +120,9 @@ static i32 hwt32_config_periodic(struct hw_timer32 *hwt, u32 expires)
 {        
         /* Count downwards from value of 'expires' to zero */
         MAP_TimerConfigure(hwt->base_addr, TIMER_CFG_PERIODIC);
-        MAP_TimerLoadSet(hwt->base_addr, TIMER_A, expires);
+        MAP_TimerLoadSet(hwt->base_addr, TIMER_A, expires); /* Countdown value */
 
-        hwt->irq_mask = TIMER_TIMA_TIMEOUT; /* IRQ for counter reaching 0 */
+        hwt->irq_mask = TIMER_TIMA_TIMEOUT; /* IRQ: when down counter reaches 0*/
         
         return 0;
 }
@@ -126,10 +131,10 @@ static i32 hwt32_config_monotone(struct hw_timer32 *hwt, u32 expires)
 {        
         /* Count upwards until counter value matches 'expires' */
         MAP_TimerConfigure(hwt->base_addr, TIMER_CFG_PERIODIC_UP);
-        MAP_TimerLoadSet(hwt->base_addr, TIMER_A, 0xFFFFFFFF); /* Counter Rollover */
-        MAP_TimerMatchSet(hwt->base_addr, TIMER_A, expires);   /* User match value */
+        MAP_TimerLoadSet(hwt->base_addr, TIMER_A, 0xFFFFFFFF); /* Rollover Val */
+        MAP_TimerMatchSet(hwt->base_addr, TIMER_A, expires); /* User match Val */
 
-        /* IRQ(s) for rollovers and couner matching 'expires' */
+        /* IRQ(s) when up counter rollsover and counter reaches 'expires' */
         hwt->irq_mask = TIMER_TIMA_TIMEOUT | TIMER_TIMA_MATCH;
         
         return 0;
@@ -183,7 +188,7 @@ i32 cc_hwt32_start(cc_hndl hndl, u32 expires, enum cc_hw_timer_mode mode)
         
         dsbl_irqc(&sys_flags);
 
-        if(hwt && (false == hwt32_is_running(hwt))) {
+        if(hwt && (false == hwt32_is_running(hwt)) && expires) {
                 rv = hwt32_start(hwt, expires, mode);
         }
 
@@ -192,26 +197,74 @@ i32 cc_hwt32_start(cc_hndl hndl, u32 expires, enum cc_hw_timer_mode mode)
         return rv;
 }
 
+
+static i32 hwt32_process_monotone_current(struct hw_timer32 *hwt,
+                                          struct u64_val *current64)
+{
+        u32 count = MAP_TimerValueGet(hwt->base_addr, TIMER_A);
+        
+        util_u32_data_add(count, HWT32_ACCESS_CYCLES, current64);
+        if((current64->hi_32 != 0) && (false == hwt->sw_early_ro)) {
+                hwt->sw_early_ro = true;
+                hwt->n_rollovers++;
+        }
+
+        current64->hi_32 = hwt->n_rollovers;
+
+        return 0;
+}
+
+/* Utility function: v1 <-- offset--> v2, move to utils */
+static u32 v1_to_v2_offset32(u32 v1, u32 v2)
+{
+        return (v2 > v1)? v2 - v1 : v1 + ~v2 + 1;
+}
+
+static i32 hwt32_update_monotone(struct hw_timer32 *hwt, u32 expires)
+{
+        struct u64_val value64 = {0, 0};
+        u32 current = 0;
+
+        hwt32_process_monotone_current(hwt, &value64);
+        current = value64.lo_32;
+        value64.hi_32 = 0;
+        
+        /* If 'expires' is too close to be missed, then push
+           out the 'expires' to ensure that IRQ is triggered */
+        if((v1_to_v2_offset32(current, expires) <
+            HWT32_ACCESS_CYCLES)                   ||
+           (v1_to_v2_offset32(expires, current) <
+            HWT32_ACCESS_CYCLES)) {
+                util_u32_data_add(HWT32_ACCESS_CYCLES, current,
+                                  &value64);
+                expires = value64.lo_32;
+        }
+
+        MAP_TimerMatchSet(hwt->base_addr, TIMER_A, expires);
+        hwt->mtone_expy.hi_32 = value64.hi_32 + hwt->n_rollovers;
+        hwt->mtone_expy.lo_32 = expires;
+
+        return 0;        
+}
+
 static i32 hwt32_update(struct hw_timer32 *hwt, u32 expires)
 {
-        i32 rv = 0;
+        i32 rv = -1;
 
         switch(hwt->op_mode) {
 
-        case HW_TIMER_ONE_SHOT:
-        case HW_TIMER_PERIODIC:
-                MAP_TimerLoadSet(hwt->base_addr, TIMER_A, expires);
+        case HW_TIMER_MONOTONE: {
+                if(hwt32_is_running(hwt))
+                        rv = hwt32_update_monotone(hwt, expires);
+        }
                 break;
 
-        case HW_TIMER_MONOTONE:
-                MAP_TimerMatchSet(hwt->base_addr, TIMER_A, expires);
-                break;
-
+        case HW_TIMER_ONE_SHOT: /* No updates: stop, program and then start */
+        case HW_TIMER_PERIODIC: /* No updates: stop, program and then start */
         default:
-                rv = -1;
                 break;
         }
-        
+
         return rv;
 }
 
@@ -222,9 +275,8 @@ i32 cc_hwt32_update(cc_hndl hndl, u32 expires)
 
         dsbl_irqc(&sys_flags);
 
-        if(hwt && (true == hwt32_is_running(hwt))) {
+        if(hwt && expires)
                 rv = hwt32_update(hwt, expires);
-        }
 
         enbl_irqc(sys_flags);
 
@@ -233,11 +285,24 @@ i32 cc_hwt32_update(cc_hndl hndl, u32 expires)
 
 static i32 hwt32_stop(struct hw_timer32* hwt)
 {
+        u32 status = 0;
+
         MAP_TimerDisable(hwt->base_addr, TIMER_A);
         MAP_TimerIntDisable(hwt->base_addr, hwt->irq_mask);
-        
+
+        status = MAP_TimerIntStatus(hwt->base_addr, true);
+        MAP_TimerIntClear(hwt->base_addr, status);
+
+        TimerValueSet(hwt->base_addr,TIMER_A,0x0);
+
         hwt32_set_op_mode(hwt, HW_TIMER_NOT_USED);
+
+        hwt->irq_mask    = 0;
         hwt->n_rollovers = 0;
+        hwt->sw_early_ro = false;
+
+        hwt->mtone_expy.hi_32 = 0;
+        hwt->mtone_expy.lo_32 = 0;
 
         return 0;
 }
@@ -258,35 +323,44 @@ i32 cc_hwt32_stop(cc_hndl hndl)
         return rv;
 }
 
-/* utility function: move to utils */
-static u32 u32_wrap_offset_v1_to_v2(u32 v1, u32 v2)
-{
-        return (v2 > v1)? v2 - v1 : v1 + ~v2 + 1;
-}
-
 static i32 hwt32_get_remaining(struct hw_timer32 *hwt, u32 *remaining)
 {
+        u32 count = 0;
         i32 rv = 0;
-        
+
         switch(hwt->op_mode) {
                 
         case HW_TIMER_ONE_SHOT:
         case HW_TIMER_PERIODIC:
-                *remaining = MAP_TimerValueGet(hwt->base_addr, TIMER_A);
+                /* Counting downwards to zero from the 'load' value.  */
+                count = MAP_TimerValueGet(hwt->base_addr, TIMER_A);
                 break;
 
-        case HW_TIMER_MONOTONE:
-                *remaining = u32_wrap_offset_v1_to_v2(
-                                        MAP_TimerMatchGet(hwt->base_addr,
-                                        				  TIMER_A),
-                                        MAP_TimerValueGet(hwt->base_addr,
-                                        				  TIMER_A));
+        case HW_TIMER_MONOTONE: {
+                /* Monotonic: Counter keeps ticking even after match w/
+                   'alarm' is done, so need some additional checks */
+                u32 match = MAP_TimerMatchGet(hwt->base_addr, TIMER_A);
+                u32 value = MAP_TimerValueGet(hwt->base_addr, TIMER_A);
+
+                if(MAP_TimerIntStatus(hwt->base_addr, true) && 
+                   TIMER_TIMA_MATCH)
+                        rv = -1; /* HW: Match value has been attained */
+                else
+                        count = v1_to_v2_offset32(value, match);
+        }
                 break;
 
         default:
                 rv = -1;
                 break;
         }        
+
+        if(0 == rv) {
+                *remaining = 
+                        count > HWT32_ACCESS_CYCLES ? 
+                        count - HWT32_ACCESS_CYCLES :/* Adjusted time */
+                        0;
+        }
 
         return rv;
 }
@@ -308,20 +382,29 @@ i32 cc_hwt32_get_remaining(cc_hndl hndl, u32 *remaining)
         return rv;
 }
 
-i32 hwt32_get_current(struct hw_timer32 *hwt, u32 *current)
+static i32 hwt32_get_current(struct hw_timer32 *hwt, u32 *current)
 {
+        u32 count = 0;
         i32 rv = 0;
 
         switch(hwt->op_mode) {
 
         case HW_TIMER_ONE_SHOT:
-        case HW_TIMER_PERIODIC:
-                *current = MAP_TimerLoadGet(hwt->base_addr, TIMER_A) -
-                		   MAP_TimerValueGet(hwt->base_addr, TIMER_A);
+        case HW_TIMER_PERIODIC: {
+                /* Counting downwards to zero from the 'load' value.  */
+                u32 loaded = MAP_TimerLoadGet(hwt->base_addr, TIMER_A);
+                u32 value = MAP_TimerValueGet(hwt->base_addr, TIMER_A);
+                count = (value < HWT32_ACCESS_CYCLES)?
+                        loaded : loaded - value - HWT32_ACCESS_CYCLES;
+        }
                 break;
 
-        case HW_TIMER_MONOTONE:
-                *current = MAP_TimerValueGet(hwt->base_addr, TIMER_A);
+        case HW_TIMER_MONOTONE: {
+                struct u64_val adjusted = {0, 0};
+
+                hwt32_process_monotone_current(hwt, &adjusted);
+                count = adjusted.lo_32;
+        }
                 break;
 
         default:
@@ -329,6 +412,9 @@ i32 hwt32_get_current(struct hw_timer32 *hwt, u32 *current)
                 break;
         }
 
+        if(0 == rv)
+                *current = count;
+        
         return rv;
 }
 
@@ -340,7 +426,6 @@ i32 cc_hwt32_get_current(cc_hndl hndl, u32 *current)
         dsbl_irqc(&sys_flags);
 
         if(hwt && (true == hwt32_is_running(hwt))) {
-                *current = MAP_TimerValueGet(hwt->base_addr, TIMER_A);
                 rv = hwt32_get_current(hwt, current);
         }
 
@@ -433,6 +518,7 @@ cc_hndl cc_hwt32_init(struct hw_timer_cfg *cfg)
         hwt->base_addr  = cfg->base_addr;
         hwt->freq_hz    = cfg->freq_hz;
 
+        hwt->sw_early_ro= false;
         enbl_irqc       = cfg->enbl_irqc;
         dsbl_irqc       = cfg->dsbl_irqc;
 
@@ -441,8 +527,39 @@ cc_hndl cc_hwt32_init(struct hw_timer_cfg *cfg)
         return (cc_hndl) hwt;
 }
 
-/* Called in interrupt context */
-void hwt32_handle_timeout(struct hw_timer32 *hwt)
+/* 
+   Called in interrupt context.
+
+   For MONOTONIC timer::             it is possible to upload a new value
+   for expiry in a running timer. The control can reach here under a race
+   condition, when new expiry is loaded into timer, whilst the system IRQ
+   was disabled for atomicity. Servicing of such "now stale" expiry needs
+   to be ignored.
+*/
+static void hwt32_handle_monotone_timeout(struct hw_timer32 *hwt, u32 status)
+{
+        struct u64_val current64 = {0, 0};
+
+        dsbl_irqc(sys_flags);
+        if(status & TIMER_TIMA_TIMEOUT) {
+                if(false == hwt->sw_early_ro)
+                        hwt->n_rollovers++;
+                else
+                        hwt->sw_early_ro = false;
+        }
+
+        hwt32_process_monotone_current(hwt, &current64);
+        enbl_irqc(sys_flags);
+        
+        if((status & TIMER_TIMA_MATCH) &&
+           (util_u64_data_cmp(&hwt->mtone_expy, &current64) <= 0))
+                /* Expiry is in past, so handle it */
+                hwt->timeout_cb(hwt->cb_param);
+
+        return;
+}
+
+static void hwt32_handle_timeout(struct hw_timer32 *hwt, u32 status)
 {
         switch(hwt->op_mode) {
 
@@ -452,8 +569,11 @@ void hwt32_handle_timeout(struct hw_timer32 *hwt)
                 break;
 
         case HW_TIMER_PERIODIC:
-        case HW_TIMER_MONOTONE:
                 hwt->timeout_cb(hwt->cb_param);
+                break;
+
+        case HW_TIMER_MONOTONE: 
+                hwt32_handle_monotone_timeout(hwt, status);
                 break;
 
         default:
@@ -478,11 +598,8 @@ void cc_hwt32_isr(cc_hndl hndl)
            (status & ~hwt->irq_mask))  
                 goto hwt32_isr_exit;
         
-        if((HW_TIMER_MONOTONE == hwt->op_mode) &&
-           (status & TIMER_TIMA_TIMEOUT))
-                hwt->n_rollovers++;
                 
-        hwt32_handle_timeout(hwt);
+        hwt32_handle_timeout(hwt, status);
         
  hwt32_isr_exit:
         MAP_TimerIntClear(hwt->base_addr, status);

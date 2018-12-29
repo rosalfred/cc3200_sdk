@@ -42,10 +42,10 @@
 #define OTA_SERVER_REST_UPDATE_CHK      "/1/metadata/auto/" // returns files/folder list
 #define OTA_SERVER_REST_RSRC_METADATA   "/1/media/auto"     // returns A url that serves the media directly
 #define OTA_SERVER_REST_HDR             "Authorization: Bearer "
-#define OTA_SERVER_REST_HDR_VAL         "96mXrGxXuyAAAAAAAAAAB2FizoMrl5oCrkPTh5GlO3EPtCCk1pE2V0FbfC9LdYXr"
+#define OTA_SERVER_REST_HDR_VAL         "<dropbox access key>"
 #define LOG_SERVER_NAME                 "api-content.dropbox.com"
 #define OTA_SERVER_REST_FILES_PUT       "/1/files_put/auto/"
-#define OTA_VENDOR_STRING               "Vid01_Pid00_Ver00"//"Vid00_Pid00_Ver00"
+#define OTA_VENDOR_STRING               "Vid01_Pid00_Ver00"
 
 
 

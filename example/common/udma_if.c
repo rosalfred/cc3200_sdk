@@ -54,7 +54,7 @@
 #include "uart.h"
 
 // TI-RTOS includes
-#ifdef USE_TIRTOS
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED)
 #include <stdlib.h>
 #include "osi.h"
 #endif
@@ -69,7 +69,7 @@
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
-unsigned char iDone;
+volatile unsigned char iDone;
 tAppCallbackHndl gfpAppCallbackHndl[MAX_NUM_CH];
 
 #if defined(gcc)
@@ -142,20 +142,28 @@ DmaErrorIntHandler(void)
 void UDMAInit()
 {
     unsigned int uiLoopCnt;
+	
     //
     // Enable McASP at the PRCM module
     //
     MAP_PRCMPeripheralClkEnable(PRCM_UDMA,PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralReset(PRCM_UDMA);
-    //
+
+	//
     // Register interrupt handlers
     //
-#ifdef USE_TIRTOS
+#if defined(USE_TIRTOS) || defined(USE_FREERTOS) || defined(SL_PLATFORM_MULTI_THREADED) 
+	// USE_TIRTOS: if app uses TI-RTOS (either networking/non-networking)
+	// USE_FREERTOS: if app uses Free-RTOS (either networking/non-networking)
+	// SL_PLATFORM_MULTI_THREADED: if app uses any OS + networking(simplelink)
     osi_InterruptRegister(INT_UDMA, DmaSwIntHandler, INT_PRIORITY_LVL_1);
     osi_InterruptRegister(INT_UDMAERR, DmaErrorIntHandler, INT_PRIORITY_LVL_1);
 #else
+	MAP_IntPrioritySet(INT_UDMA, INT_PRIORITY_LVL_1);
     MAP_uDMAIntRegister(UDMA_INT_SW, DmaSwIntHandler);
-    MAP_uDMAIntRegister(UDMA_INT_ERR, DmaErrorIntHandler);
+
+	MAP_IntPrioritySet(INT_UDMAERR, INT_PRIORITY_LVL_1);
+	MAP_uDMAIntRegister(UDMA_INT_ERR, DmaErrorIntHandler);
 #endif
 
     //
@@ -168,7 +176,8 @@ void UDMAInit()
     //
     memset(gpCtlTbl,0,sizeof(tDMAControlTable)*CTL_TBL_SIZE);
     MAP_uDMAControlBaseSet(gpCtlTbl);
-    //
+
+	//
     // Reset App Callbacks
     //
     for(uiLoopCnt = 0; uiLoopCnt < MAX_NUM_CH; uiLoopCnt++)
@@ -192,7 +201,7 @@ void UDMAInit()
 //*****************************************************************************
 void UDMAChannelSelect(unsigned int uiChannel, tAppCallbackHndl pfpAppCb)
 {
-    if((uiChannel & 0xFF) > MAX_NUM_CH)
+    if((uiChannel & 0xFF) >= MAX_NUM_CH)
     {
         return;
     }
@@ -204,54 +213,12 @@ void UDMAChannelSelect(unsigned int uiChannel, tAppCallbackHndl pfpAppCb)
 
 //*****************************************************************************
 //
-//! Does the actual Memory transfer
-//!
-//! \param ulChannel. DMA Channel to be used
-//! \param ulMode. DMA Mode to be used
-//! \param ulItemCount. Items to be transfered in DMA Transfer
-//! \param ulArbSize. Arbitration Size to be set
-//! \param pvSrcBuf. Pointer to the source Buffer
-//! \param ulSrcInc. Source Increment
-//! \param pvDstBuf. Pointer to the Destination Buffer
-//! \param ulDstInc. Destination Increment
-//!
-//! This function
-//!        1. Sets up the uDMA registers to perform the actual transfer
-//!
-//! \return None.
-//
-//*****************************************************************************
-void SetupTransfer(unsigned long ulChannel,
-                   unsigned long ulMode,
-                   unsigned long ulItemCount,
-                   unsigned long ulItemSize,
-                   unsigned long ulArbSize,
-                   void *pvSrcBuf,
-                   unsigned long ulSrcInc,
-                   void *pvDstBuf,
-                   unsigned long ulDstInc)
-{
-
-    MAP_uDMAChannelControlSet(ulChannel,
-                              ulItemSize | ulSrcInc | ulDstInc | ulArbSize);
-
-    MAP_uDMAChannelAttributeEnable(ulChannel,UDMA_ATTR_USEBURST);
-
-    MAP_uDMAChannelTransferSet(ulChannel, ulMode,
-                               pvSrcBuf, pvDstBuf, ulItemCount);
-
-    MAP_uDMAChannelEnable(ulChannel);
-
-}
-
-//*****************************************************************************
-//
 //! Sets up the Auto Memory transfer
 //!
 //! \param ulChannel. DMA Channel to be used
 //! \param pvSrcBuf. Pointer to the source buffer
 //! \param pvDstBuf. Pointer to the destination buffer
-//! \param size. Items to be transfered
+//! \param size. Items to be transfered(should not exceed 1024).
 //!
 //! This function
 //!        1. Configures the uDMA channel
@@ -262,9 +229,9 @@ void SetupTransfer(unsigned long ulChannel,
 void UDMASetupAutoMemTransfer(unsigned long ulChannel, void *pvSrcBuf,
                               void *pvDstBuf, unsigned long size)
 {
-    SetupTransfer(ulChannel, UDMA_MODE_AUTO, size,
-                  UDMA_SIZE_8, UDMA_ARB_8, pvSrcBuf,
-                  UDMA_SRC_INC_8, pvDstBuf, UDMA_DST_INC_8);
+    UDMASetupTransfer(ulChannel, UDMA_MODE_AUTO, size,
+                      UDMA_SIZE_8, UDMA_ARB_8, pvSrcBuf,
+                      UDMA_SRC_INC_8, pvDstBuf, UDMA_DST_INC_8);
 }
 
 //*****************************************************************************
@@ -276,7 +243,7 @@ void UDMASetupAutoMemTransfer(unsigned long ulChannel, void *pvSrcBuf,
 //! \param pvDstBuf1.Pointer to the Destination Buffer for Primary  Structure
 //! \param pvSrcBuf2.Pointer to the Source Buffer for alternate Control Structure
 //! \param pvDstBuf2. Pointer to the Destination Buffer for alternate Structure
-//! \param size. Total size to be transferred.
+//! \param size. Total size to be transferred(should not exceed 1024).
 //!
 //! This function
 //!        1. Configures the uDMA channel
@@ -288,13 +255,13 @@ void UDMASetupPingPongTransfer(unsigned long ulChannel, void *pvSrcBuf1,
                               void *pvDstBuf1, void *pvSrcBuf2,
                               void *pvDstBuf2, unsigned long size)
 {
-    SetupTransfer(ulChannel, UDMA_MODE_PINGPONG, size, UDMA_SIZE_8,
-                  UDMA_ARB_8, pvSrcBuf1, UDMA_SRC_INC_8,
-                  pvDstBuf1, UDMA_DST_INC_8);
+    UDMASetupTransfer(ulChannel, UDMA_MODE_PINGPONG, size, UDMA_SIZE_8,
+                     UDMA_ARB_8, pvSrcBuf1, UDMA_SRC_INC_8,
+                     pvDstBuf1, UDMA_DST_INC_8);
 
-    SetupTransfer(ulChannel|UDMA_ALT_SELECT, UDMA_MODE_PINGPONG, size,
-                    UDMA_SIZE_8, UDMA_ARB_8, pvSrcBuf2, UDMA_SRC_INC_8,
-                        pvDstBuf2, UDMA_DST_INC_8);
+    UDMASetupTransfer(ulChannel|UDMA_ALT_SELECT, UDMA_MODE_PINGPONG, size,
+                      UDMA_SIZE_8, UDMA_ARB_8, pvSrcBuf2, UDMA_SRC_INC_8,
+                      pvDstBuf2, UDMA_DST_INC_8);
 }
 
 //*****************************************************************************
@@ -364,10 +331,30 @@ void UDMADeInit()
     MAP_uDMADisable();
 }
 
-void DMASetupTransfer(unsigned long ulChannel, unsigned long ulMode,
-                      unsigned long ulItemCount, unsigned long ulItemSize,
-                      unsigned long ulArbSize, void *pvSrcBuf,
-                      unsigned long ulSrcInc, void *pvDstBuf, unsigned long ulDstInc)
+//*****************************************************************************
+//
+//! Does the actual Memory transfer
+//!
+//! \param ulChannel. DMA Channel to be used
+//! \param ulMode. DMA Mode to be used
+//! \param ulItemCount. Items to be transfered in DMA Transfer(should not exceed 1024)
+//! \param ulArbSize. Arbitration Size to be set
+//! \param pvSrcBuf. Pointer to the source Buffer
+//! \param ulSrcInc. Source Increment
+//! \param pvDstBuf. Pointer to the Destination Buffer
+//! \param ulDstInc. Destination Increment
+//!
+//! This function
+//!        1. Sets up the uDMA registers to perform the actual transfer
+//!
+//! \return None.
+//
+//*****************************************************************************
+void UDMASetupTransfer(unsigned long ulChannel, unsigned long ulMode,
+                            unsigned long ulItemCount, unsigned long ulItemSize,
+                            unsigned long ulArbSize, void *pvSrcBuf,
+                            unsigned long ulSrcInc, void *pvDstBuf,
+                            unsigned long ulDstInc)
 {
     MAP_uDMAChannelControlSet(ulChannel, ulItemSize | ulSrcInc | ulDstInc | ulArbSize);
     MAP_uDMAChannelAttributeEnable(ulChannel,UDMA_ATTR_USEBURST);

@@ -32,6 +32,7 @@ char    HTTP_VERSION_1P0[]              =  "http/1.0";
 
 // HTTP request/response header line strings
 char    HTTP_CONTENT_TYPE[]             =  "content-type";
+char    HTTP_UPGRADE_INSECURE_REQUESTS[] =  "upgrade-insecure-requests";
 char    HTTP_CONTENT_LENGTH[]           =  "content-length";
 char    HTTP_ACCEPT_ENCODING[]          =  "accept-encoding";
 char    HTTP_AUTHORIZATION[]            =  "authorization";
@@ -60,10 +61,7 @@ char	WS_ORIGIN[]					= 	"origin";
 char	WS_CACHE_CONTROL[]			= 	"cache-control";
 char	WS_PRAGMA[]					=	"pragma";
 char    WS_EXTENSION[]				=   "sec-websocket-extensions";
-char*	WS_ORIGIN_NAME;
-
-// The client generated key should be 16 bytes if base64 decoded
-char	WS_KEY[24];
+char*	WS_ORIGIN_NAME = NULL;
 
 //WebSocket response line strings
 char 	WS_WEBSOCKET[]				= 	"websocket";
@@ -71,6 +69,10 @@ char	WS_MAGIC_STRING[]			= 	"258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 char 	WS_VERSION[]				=   "13";
 char 	WS_ACCEPT[]					=   "Sec-websocket-accept";
 
+///Length of client generated key
+#define WS_KEY_LENGTH 			24
+// The client generated key should be 16 bytes if base64 decoded
+UINT8 WS_KEY[WS_KEY_LENGTH + 1];
 
 /// @}
 #endif //_HTTP_HEADERS_H_

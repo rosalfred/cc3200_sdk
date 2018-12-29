@@ -3,7 +3,7 @@
 #  package.bld.  Any modifications to this file will be 
 #  overwritten whenever makefiles are re-generated.
 #
-#  target compatibility key = gnu.targets.arm.M4{1,0,4.8,3
+#  target compatibility key = gnu.targets.arm.M4{1,0,4.9,3
 #
 app.xm4g: package/cfg/app.xm4g.mak
 

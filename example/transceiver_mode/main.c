@@ -86,7 +86,7 @@
 
 
 #define APPLICATION_NAME        "TRANSCEIVER_MODE"
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 
 #define PREAMBLE            1        /* Preamble value 0- short, 1- long */
 #define CPU_CYCLES_1MSEC (80*1000)
@@ -114,7 +114,7 @@ typedef struct
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
-unsigned long  g_ulStatus = 0;//SimpleLink Status
+volatile unsigned long  g_ulStatus = 0;//SimpleLink Status
 unsigned long  g_ulGatewayIP = 0; //Network Gateway IP address
 unsigned char  g_ucConnectionSSID[SSID_LEN_MAX+1]; //Connection SSID
 unsigned char  g_ucConnectionBSSID[BSSID_LEN_MAX]; //Connection BSSID
@@ -238,8 +238,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
             pEventData = &pWlanEvent->EventData.STAandP2PModeDisconnected;
 
             // If the user has initiated 'Disconnect' request,
-            //'reason_code' is SL_USER_INITIATED_DISCONNECTION
-            if(SL_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
+            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION
+            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
             {
                 UART_PRINT("[WLAN EVENT]Device disconnected from the AP: %s,"
                            " BSSID: %x:%x:%x:%x:%x:%x on application's"
@@ -375,6 +375,7 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
     //
        
 }
+
 
 //*****************************************************************************
 // SimpleLink Asynchronous Event Handlers -- End
@@ -846,7 +847,7 @@ static int RxStatisticsCollect()
     //
     rxStatResp.ReceivedValidPacketsNumber = 0;
     rxStatResp.ReceivedFcsErrorPacketsNumber = 0;
-    rxStatResp.ReceivedPlcpErrorPacketsNumber = 0;
+    rxStatResp.ReceivedAddressMismatchPacketsNumber = 0;
     rxStatResp.AvarageMgMntRssi = 0;
     rxStatResp.AvarageDataCtrlRssi = 0;
     for(iIndex = 0 ; iIndex < SIZE_OF_RSSI_HISTOGRAM ; iIndex++)
@@ -962,7 +963,7 @@ static int RxStatisticsCollect()
     UART_PRINT("Number of Packets Received Packets with FCS: %d\n\r",
                    rxStatResp.ReceivedFcsErrorPacketsNumber);
     UART_PRINT("Number of Packets Received Packets with PLCP: %d\n\n\r",   \
-                   rxStatResp.ReceivedPlcpErrorPacketsNumber);
+                   rxStatResp.ReceivedAddressMismatchPacketsNumber);
     UART_PRINT("Average Rssi for management packets: %d\
                     \n\rAverage Rssi for other packets: %d\n\r",
                    rxStatResp.AvarageMgMntRssi,rxStatResp.AvarageDataCtrlRssi);

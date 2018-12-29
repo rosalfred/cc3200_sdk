@@ -88,7 +88,15 @@ int HttpStatic_ProcessRequest(struct HttpRequest* request)
 	SlFsFileInfo_t pFsFileInfo;
 	UINT32 TotalLength;
 	UINT8 HeaderFlag =0;
+	UINT8 bRetVal = 1;
+	UINT8 *buffer = NULL;
 
+
+	if(content == NULL)
+	{
+		sl_FsClose(glFileHandle,0,0,0);
+		return 0;
+	}
 	location.pData = NULL;
 	location.uLength = 0;
 	contentType = location;
@@ -100,9 +108,15 @@ int HttpStatic_ProcessRequest(struct HttpRequest* request)
 	{
 		 /* HttpResponse_CannedError responds to client with 500 ERROR_INTERNAL  */
    		 if(!HttpResponse_CannedError(request->uConnection, HTTP_STATUS_ERROR_INTERNAL))
-   		 	 return 0;
+   		 {
+   			bRetVal = 0;
+   			goto end;
+   		 }
    		 else
-   		 	 return 1;
+   		 {
+   			bRetVal = 1;
+   			goto end;
+   		 }
 	}
 
 	sl_FsGetInfo((unsigned char *)g_cFileName, NULL, &pFsFileInfo);
@@ -112,7 +126,12 @@ int HttpStatic_ProcessRequest(struct HttpRequest* request)
 	{
 		content->uLength = ((TotalLength < 1000) ? (TotalLength):(1000));
 
-		UINT8* (buffer) = (UINT8*)malloc(content->uLength);
+		buffer = (UINT8*)realloc(buffer, content->uLength);
+		if(buffer == NULL)
+		{
+			bRetVal = 0;
+			goto end;
+		}
 		content->pData = buffer;
 
 		/* if got here than it is a GET method
@@ -121,34 +140,50 @@ int HttpStatic_ProcessRequest(struct HttpRequest* request)
 		{
 			/* call HttpResponse_CannedError responds to client with 500 ERROR_INTERNAL  */
 			if(!HttpResponse_CannedError(request->uConnection, HTTP_STATUS_ERROR_NOT_ACCEPTED))
-				return 0;
+			{
+				bRetVal = 0;
+				goto end;
+			}
 			else
-				return 1;
+			{
+				bRetVal = 1;
+				goto end;
+			}
 		}
 		else
 		{
 			if(!HeaderFlag)
 			{
 				if(!HttpResponse_Headers(request->uConnection, HTTP_STATUS_OK, NULL,TotalLength, contentType, location))
-					return 0;
+				{
+					bRetVal = 0;
+					goto end;
+				}
 				HeaderFlag = 1;
 			}
 
 			/* HttpResponse_Content() sends requested page to the client */
 			if(!HttpResponse_Content(request->uConnection, *content))
-				return 0;
+			{
+				bRetVal = 0;
+				goto end;
+			}
 		}
 
 		TotalLength -= content->uLength;
 		Offset += content->uLength;
-		free(buffer);
 	}
 
-	sl_FsClose(glFileHandle,0,0,0);
 
+end:
+	sl_FsClose(glFileHandle,0,0,0);
+	if(buffer != NULL)
+	{
+		free(buffer);
+	}
 	free(content);
 
-	return 1;
+	return bRetVal;
 }
 
 /// @}

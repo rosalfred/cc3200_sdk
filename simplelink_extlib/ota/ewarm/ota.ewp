@@ -17,19 +17,19 @@
         <debug>0</debug>
         <option>
           <name>ExePath</name>
-          <state>Release\exe</state>
+          <state>Release\Exe</state>
         </option>
         <option>
           <name>ObjPath</name>
-          <state>Release\obj</state>
+          <state>Release\Obj</state>
         </option>
         <option>
           <name>ListPath</name>
-          <state>Release\list</state>
+          <state>Release\List</state>
         </option>
         <option>
           <name>Variant</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
@@ -60,7 +60,7 @@
         </option>
         <option>
           <name>FPU</name>
-          <version>2</version>
+          <version>3</version>
           <state>0</state>
         </option>
         <option>
@@ -87,7 +87,7 @@
         </option>
         <option>
           <name>OGLastSavedByProductVersion</name>
-          <state>7.20.1.7306</state>
+          <state>7.30.4.8186</state>
         </option>
         <option>
           <name>GeneralEnableMisra</name>
@@ -137,12 +137,12 @@
         </option>
         <option>
           <name>GFPUCoreSlave</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
           <name>GBECoreSlave</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
@@ -249,11 +249,11 @@
         </option>
         <option>
           <name>IExtraOptionsCheck</name>
-          <state>0</state>
+          <state>1</state>
         </option>
         <option>
           <name>IExtraOptions</name>
-          <state></state>
+          <state>--diag_suppress Pa050</state>
         </option>
         <option>
           <name>CCLangConformance</name>
@@ -308,6 +308,7 @@
           <state>$PROJ_DIR$\..\..\..\simplelink\</state>
           <state>$PROJ_DIR$\..\..\..\simplelink\Include\</state>
           <state>$PROJ_DIR$\..\..\..\simplelink\Source\</state>
+		  <state>$PROJ_DIR$\..\..\..\simplelink_extlib\provisioninglib\</state>
         </option>
         <option>
           <name>CCStdIncCheck</name>
@@ -617,6 +618,7 @@
       <data>
         <extensions></extensions>
         <cmdline></cmdline>
+        <hasPrio>0</hasPrio>
       </data>
     </settings>
     <settings>
@@ -939,7 +941,7 @@
         </option>
         <option>
           <name>IarchiveOutput</name>
-          <state>D:\ti\CC3200SDK_1.0.0_10_Sep_2014\cc3200-sdk\simplelink_extlib\ota\ewarm\Release\exe\ota.a</state>
+          <state>D:\git\a0132167_SDK_1p1\source-1p1-rahul\simplelink_extlib\ota\ewarm\Release\Exe\ota.a</state>
         </option>
       </data>
     </settings>
@@ -953,37 +955,16 @@
     <name>$PROJ_DIR$\..\CdnClient.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$\..\CdnClient.h</name>
-  </file>
-  <file>
     <name>$PROJ_DIR$\..\LogClient.c</name>
-  </file>
-  <file>
-    <name>$PROJ_DIR$\..\LogClient.h</name>
-  </file>
-  <file>
-    <name>$PROJ_DIR$\..\..\include\ota_api.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\..\OtaApp.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$\..\OtaApp.h</name>
-  </file>
-  <file>
     <name>$PROJ_DIR$\..\OtaClient.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$\..\OtaClient.h</name>
-  </file>
-  <file>
-    <name>$PROJ_DIR$\..\OtaCommon.h</name>
-  </file>
-  <file>
     <name>$PROJ_DIR$\..\OtaHttp.c</name>
-  </file>
-  <file>
-    <name>$PROJ_DIR$\..\OtaHttp.h</name>
   </file>
 </project>
 

@@ -90,7 +90,7 @@
 #define OSI_STACK_SIZE                  1024
 
 #define APPLICATION_NAME        "CAMERA_APPLICATION"
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
@@ -310,6 +310,11 @@ int main()
 #ifndef NOTERM
     InitTerm();
 #endif  //NOTERM
+
+  //
+  // Initilalize DMA
+  //
+  UDMAInit();
 
   // 
   // Simplelinkspawntask 

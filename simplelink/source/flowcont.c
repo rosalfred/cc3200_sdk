@@ -1,7 +1,7 @@
 /*
  * flowcont.c - CC31xx/CC32xx Host Driver Implementation
  *
- * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/ 
+ * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/ 
  * 
  * 
  *  Redistribution and use in source and binary forms, with or without 
@@ -48,6 +48,7 @@
 /*****************************************************************************/
 /* _SlDrvFlowContInit */
 /*****************************************************************************/
+#if 0
 void _SlDrvFlowContInit(void)
 {
     g_pCB->FlowContCB.TxPoolCnt = FLOW_CONT_MIN;
@@ -68,4 +69,5 @@ void _SlDrvFlowContDeinit(void)
 
     OSI_RET_OK_CHECK(sl_SyncObjDelete(&g_pCB->FlowContCB.TxSyncObj));
 }
+#endif
 

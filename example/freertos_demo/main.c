@@ -57,16 +57,20 @@
 //
 //*****************************************************************************
 
-// Standard includes. 
+//*****************************************************************************
+// Same application can be used to demonstrate TI-RTOS demo with a small change
+// in CCS project proerties: 
+//      a. add ti_rtos_config in workspace and add as dependencies in 
+//         project setting Build->Dependecies->add
+//      b. Define USE_TIRTOS in Properties->Build->Advanced Options->
+//         Predefined Symbols instead of USE_FREERTOS
+//      c. add ti_rtos.a in linker files search option
+//*****************************************************************************
+
+// Standard includes.
 #include <stdio.h>
 #include <stdlib.h>
 
-// Free-RTOS includes
-#include "FreeRTOS.h"
-#include "task.h"
-#include "queue.h"
-#include "semphr.h"
-#include "portmacro.h"
 #include "osi.h"
 
 // Driverlib includes
@@ -89,25 +93,28 @@
 //*****************************************************************************
 //                      MACRO DEFINITIONS
 //*****************************************************************************
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 #define UART_PRINT              Report
 #define SPAWN_TASK_PRIORITY     9
-#define OSI_STACK_SIZE          1024
+#define OSI_STACK_SIZE          2048
 #define APP_NAME                "FreeRTOS Demo"
+#define MAX_MSG_LENGTH			16
 
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
 // The queue used to send strings to the task1.
-QueueHandle_t xPrintQueue;
+OsiMsgQ_t MsgQ;
 
-#if defined(ccs) || defined(gcc)
+#ifndef USE_TIRTOS
+/* in case of TI-RTOS don't include startup_*.c in app project */
+#if defined(gcc) || defined(ccs)
 extern void (* const g_pfnVectors[])(void);
 #endif
 #if defined(ewarm)
 extern uVectorEntry __vector_table;
 #endif
-
+#endif
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- End
 //*****************************************************************************
@@ -210,16 +217,16 @@ void vApplicationStackOverflowHook( OsiTaskHandle *pxTask,
 //******************************************************************************
 void vTestTask1( void *pvParameters )
 {
-   portCHAR *pcMessage;
+	char pcMessage[MAX_MSG_LENGTH];
     for( ;; )
     {
-      /* Wait for a message to arrive. */
-      xQueueReceive( xPrintQueue, &pcMessage, portMAX_DELAY );
+    	/* Wait for a message to arrive. */
+    	osi_MsgQRead(&MsgQ, pcMessage, OSI_WAIT_FOREVER);
 
-      UART_PRINT("message = ");
-      UART_PRINT(pcMessage);
-      UART_PRINT("\n\r");
-      MAP_UtilsDelay(2000000);
+		UART_PRINT("message = ");
+		UART_PRINT(pcMessage);
+		UART_PRINT("\n\r");
+		osi_Sleep(200);
     }
 }
 
@@ -238,16 +245,17 @@ void vTestTask1( void *pvParameters )
 void vTestTask2( void *pvParameters )
 {
    unsigned long ul_2;
-   const portCHAR *pcInterruptMessage[4] = {"Welcome","to","CC32xx"
+   const char *pcInterruptMessage[4] = {"Welcome","to","CC32xx"
            ,"development !\n"};
+
    ul_2 =0;
-      
+
    for( ;; )
      {
        /* Queue a message for the print task to display on the UART CONSOLE. */
-      xQueueSend( xPrintQueue, &pcInterruptMessage[ul_2 % 4], portMAX_DELAY );
-      ul_2++;
-      MAP_UtilsDelay(2000000);
+	   osi_MsgQWrite(&MsgQ, (void*) pcInterruptMessage[ul_2 % 4], OSI_NO_WAIT);
+	   ul_2++;
+	   osi_Sleep(200);
      }
 }
 
@@ -340,26 +348,25 @@ int main( void )
     //
     // Creating a queue for 10 elements.
     //
-    xPrintQueue =xQueueCreate( 10, sizeof( unsigned portLONG ) );
-
-    if( xPrintQueue == 0 )
+    OsiReturnVal_e osi_retVal;
+    osi_retVal = osi_MsgQCreate(&MsgQ, "MSGQ", MAX_MSG_LENGTH, 10);
+    if(osi_retVal != OSI_OK)
     {
-      // Queue was not created and must not be used.
-      return 0;
+    	// Queue was not created and must not be used.
+    	while(1);
     }
-    VStartSimpleLinkSpawnTask(SPAWN_TASK_PRIORITY);
 
     //
     // Create the Queue Receive task
     //
-    osi_TaskCreate( vTestTask1, ( signed portCHAR * ) "TASK1",
-                OSI_STACK_SIZE, NULL, 1, NULL );
+    osi_TaskCreate( vTestTask1, "TASK1",\
+    							OSI_STACK_SIZE, NULL, 1, NULL );
 
     //
     // Create the Queue Send task
     //
-    osi_TaskCreate( vTestTask2, ( signed portCHAR * ) "TASK2",
-                OSI_STACK_SIZE,NULL, 1, NULL );
+    osi_TaskCreate( vTestTask2, "TASK2",\
+    							OSI_STACK_SIZE,NULL, 1, NULL );
 
     //
     // Start the task scheduler

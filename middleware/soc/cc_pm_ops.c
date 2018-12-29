@@ -412,11 +412,11 @@ i32 cc_enter_S2(void)
 
         return 0;
 }
-volatile i32 sleep_count = 0;
+
 /* Must push system to low power state of S1 */
 i32  cc_enter_S1(void)
 {
-        //MAP_PRCMSleepEnter();
+        MAP_PRCMSleepEnter();
         return 0;
 }
 

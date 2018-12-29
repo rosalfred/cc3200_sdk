@@ -44,25 +44,11 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include "cc_types.h"
+#include "util64.h"
 
 /* Candidates for system level common header file */
 
 typedef void (*cc_cb_fn)(cc_hndl);
-
-struct u64_val {
-        
-        u32 hi_32;
-        u32 lo_32;
-};
-
-/* End common headef file candidates */
-
-struct u64_time {
-
-        u32 secs;
-        u32 nsec;
-};
 
 enum cc_hw_timer_mode {
         

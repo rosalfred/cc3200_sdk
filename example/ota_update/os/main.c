@@ -803,7 +803,7 @@ void DisplayTask(void *pvParameters)
     //
     // Clear screen
     //
-    //Message("\033[2J\033[H\033[?25l");
+    Message("\033[2J\033[H\033[?25l");
 
     //
     // Display Banner

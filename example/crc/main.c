@@ -85,7 +85,7 @@
 #include "crc_userinput.h"
 
 #define USER_INPUT
-#define APPLICATION_VERSION "1.1.0"
+#define APPLICATION_VERSION "1.1.1"
 #define CCM0_BASE           DTHE_BASE
 #define UART_PRINT          Report
 #define FOREVER             1
@@ -123,17 +123,11 @@ RunCRC(unsigned int uiConfig,unsigned int uiDataLength,unsigned int uiSeed,
             unsigned int *puiData,unsigned int *puiResult)
 {
   //
-  // Step1: Reset the Module
-  // Step2: Set the Configuration Parameters 
-  // Step3: Write the seed value
-  // Step4: Start CRC generation
+  // Step1: Set the Configuration Parameters 
+  // Step2: Write the seed value
+  // Step3: Start CRC generation
   //
 
-  //
-  // Reset the module.
-  //
-  MAP_PRCMPeripheralReset(PRCM_DTHE);
-  
   //
   // Configure the CRC engine.
   //
@@ -182,15 +176,16 @@ LoadDefaultValues(unsigned int ui32Config,unsigned int *uiConfig,unsigned int
     // Read Seed Value
     //
     *uiSeed=g_psCRC8005TestVectors.ui32Seed;
-    puiResult=(unsigned int*)malloc(4);
-    memset(puiResult,0,4);
+    *puiResult = 0;
     uiData=(unsigned int*)malloc(64);
+    if(uiData != NULL)
+    {
     memset(uiData,0,64);
     //
     // Read the Data
     //
     memcpy(uiData,g_psCRC8005TestVectors.ui32Data,64);
-
+    }
     return uiData; 
    
 }
@@ -323,6 +318,10 @@ main()
         // Display Plain Text
         //
         UART_PRINT("\n\r The CRC Result in hex is: 0x%02x \n\r",uiResult);
+        if(puiData)
+        {
+            free(puiData);
+        }
     }
 #else
     //

@@ -114,15 +114,8 @@ i32 register_isr(u8 irqvec_id,
            occurance. The new setting will override the older ones always */
         isr_handler_list[irqvec_id].reg_intr_handler = intr_handler;
         isr_handler_list[irqvec_id].intr_param = param;
-#if 1
+
         osi_InterruptRegister(irqvec_id, (P_OSI_INTR_ENTRY)global_intr_handler, (1 << 5));
-#else
-        /* Register the interrupt with the global interrupt handler */
-        MAP_IntRegister(irqvec_id, global_intr_handler);
-        
-        /* Enable the interrupt */
-        MAP_IntEnable(irqvec_id);        
-#endif
         if(INT_PRCM == irqvec_id) {
                 MAP_PRCMIntEnable(PRCM_INT_SLOW_CLK_CTR);
         }

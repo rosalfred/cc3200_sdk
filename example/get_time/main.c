@@ -92,7 +92,7 @@
 #include "common.h"
 
 #define APP_NAME                "Get Time"
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 
 #define TIME2013                3565987200u      /* 113 years + 28 days(leap) */
 #define YEAR2013                2013
@@ -143,7 +143,7 @@ extern uVectorEntry __vector_table;
 //!
 //!    ##   For more SNTP server link visit 'http://tf.nist.gov/tf-cgi/servers.cgi'
 //!    ###################################################################################
-const char g_acSNTPserver[30] = "nist1-nj2.ustiming.org"; //Add any one of the above servers
+const char g_acSNTPserver[30] = "time-a.nist.gov"; //Add any one of the above servers
 
 // Tuesday is the 1st day in 2013 - the relative year
 const char g_acDaysOfWeek2013[7][3] = {{"Tue"},
@@ -487,7 +487,7 @@ void LedTimerConfigNStart()
     //
     Timer_IF_Init(PRCM_TIMERA0,TIMERA0_BASE,TIMER_CFG_PERIODIC,TIMER_A,0);
     Timer_IF_IntSetup(TIMERA0_BASE,TIMER_A,TimerPeriodicIntHandler);
-    Timer_IF_Start(TIMERA0_BASE,TIMER_A,PERIODIC_TEST_CYCLES / 10);
+    Timer_IF_Start(TIMERA0_BASE,TIMER_A,100);  // time is in mSec
 }
 
 //****************************************************************************

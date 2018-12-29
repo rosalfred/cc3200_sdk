@@ -171,7 +171,7 @@ _i32 OtaClient_ResourceMetadata(void *pvOtaClient, _u8 *resource_file_name, OtaF
     }
 
 #ifdef TI_OTA_SERVER
-    http_build_request (send_buf, "GET ",  pOtaServerInfo->server_domain, pOtaServerInfo->rest_rsrc_metadata, NULL             , pOtaServerInfo->rest_hdr, pOtaServerInfo->rest_hdr_val);
+    http_build_request (send_buf, "GET ",  pOtaServerInfo->server_domain, pOtaServerInfo->rest_rsrc_metadata, NULL,             , pOtaServerInfo->rest_hdr, pOtaServerInfo->rest_hdr_val);
 #else
     http_build_request (send_buf, "POST ", pOtaServerInfo->server_domain, pOtaServerInfo->rest_rsrc_metadata, resource_file_name, pOtaServerInfo->rest_hdr, pOtaServerInfo->rest_hdr_val);
 #endif

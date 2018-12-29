@@ -145,7 +145,7 @@ LIBGCC:=${shell ${CC} -mthumb ${CFLAGS} -print-libgcc-file-name}
 #
 # Get the location of libc.a from the GCC front-end.
 #
-LIBC:=${shell ${CC} ${CFLAGS} -print-file-name=libc_s.a}
+LIBC:=${shell ${CC} ${CFLAGS} -print-file-name=libc.a}
 
 #
 # Get the location of libm.a from the GCC front-end.

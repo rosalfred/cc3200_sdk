@@ -282,6 +282,7 @@ void NwpUnMaskInterrupt()
 	(*(unsigned long *)REG_INT_MASK_CLR) = 0x1;
 }
 
+#ifndef DISABLE_DEBUGGER_RECONNECT
 /*!
     \brief		Preamble to the enabling the Network Processor.
                         Placeholder to implement any pre-process operations
@@ -333,7 +334,7 @@ void NwpPowerOnPreamble(void)
     NwpPowerOff();
 #endif
 }
-
+#endif
 /*!
     \brief		Enable the Network Processor
 
@@ -360,7 +361,9 @@ void NwpPowerOn(void)
 #endif
 
     HWREG(0x44025118) = 1;
+#ifndef DISABLE_DEBUGGER_RECONNECT
     UtilsDelay(8000000);
+#endif
     //UnMask Host Interrupt
     NwpUnMaskInterrupt();
 
@@ -396,3 +399,54 @@ void NwpPowerOff(void)
 #endif
 }
 
+/*!
+    \brief      Disable the Network Processor. This API additionally ensures that 
+                the Network processor has entered Low power mode before shutting
+                it down
+
+    \sa         sl_DeviceEnable
+
+    \note       belongs to \ref ported_sec
+*/
+void NwpPowerOff_WithNwpLpdsPoll(void)
+{
+    //Must delay 300 usec to enable the NWP to finish all sl_stop activities
+	UtilsDelay(300*80/3);
+    
+    //Mask Host Interrupt
+    NwpMaskInterrupt();
+    
+#ifdef CC3200_ES_1_2_1
+    //Reset NWP
+    HWREG(APPS_SOFT_RESET_REG) |= 4; 
+    //WLAN PD OFF
+    HWREG(OCP_SHARED_MAC_RESET_REG) |= 0xC00;
+#else
+    
+    // Dynamic delay loop to make sure the NWP has entered low power mode
+    {
+        // Wait for NWP to enter LPDS with 100 mSec timeout
+        unsigned int NwpActive;
+        long TimeoutUsec;
+
+        TimeoutUsec = 100000;
+
+        do
+        {
+            NwpActive = ((HWREG(0x4402DC48) & 0xF00) == 0x300);
+            TimeoutUsec -= 10;
+            UtilsDelay(800/6);
+        }while (NwpActive && (TimeoutUsec > 0));        
+    }  
+    
+    // Switch to PFM Mode
+    // Note: make sure the switch to PFM Mode is done just before killing the
+    // network processor
+    HWREG(0x4402F024) &= 0xF7FFFFFF;
+    
+    //Killing the NWP
+    HWREG(0x4402E16C) |= 0x2;
+
+    UtilsDelay(800000);
+#endif
+}

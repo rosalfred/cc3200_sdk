@@ -13,7 +13,7 @@
 #*****************************************************************************
 
 #Re-locator Path
-RELOCATOR=../relocator/ewarm/Release/Exe/
+RELOCATOR=../relocator/gcc/exe
 
 #Boot Manager Path
 BOOTMGR=Exe/

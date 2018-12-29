@@ -42,7 +42,7 @@ int SetResources(unsigned char method, char* pBuf, unsigned char* (*pCbRestFunc)
 
 	// POST is 0 and GET is 1
 
-	if(g_NumResource <= MAX_RESOURCE)
+	if(g_NumResource < MAX_RESOURCE)
 	{
 		g_RestContent[g_NumResource].rest_method = method;
 		g_RestContent[g_NumResource].ResourceString = (unsigned char*)pBuf;

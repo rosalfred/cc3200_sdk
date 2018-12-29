@@ -37,9 +37,6 @@
 /// Maximum length of header line which might be buffered, per connection, if a line is broken between packets
 #define HTTP_CORE_MAX_HEADER_LINE_LENGTH 320
 
-///Length of client generated key
-#define WS_KEY_LENGTH 24
-
 /**
  * Initialize and start the HTTP server.
  * The Wifi interface of the CC3200 chip should be initialized by now, and connected to the network

@@ -293,6 +293,10 @@ i32 cc_spi_wr_submit(cc_hndl hndl, const i8 *data, i32 size,
                 } else {
                         cs_ctrl = 0;
                 }
+
+                /* Added to handle combinations of DMA and CPU transfers*/
+                MAP_SPIWordCountSet(spi_config->base_addr, 0);
+
                 MAP_SPITransfer(spi_config->base_addr,
                                 (u8 *)data,
                                 NULL,
@@ -331,6 +335,9 @@ i32 cc_spi_rd_submit(cc_hndl hndl,i8 *rd_data, i32 rd_size,
                 } else {
                         cs_ctrl = 0;
                 }
+
+                /* Added to handle combinations of DMA and CPU transfers*/
+                MAP_SPIWordCountSet(spi_config->base_addr, 0);
 
                 MAP_SPITransfer(spi_config->base_addr,
                                 NULL,
@@ -372,6 +379,10 @@ i32 cc_spi_rw_submit(cc_hndl hndl, const i8 *wr_data, i8 *rd_data,
                 } else {
                         cs_ctrl = 0;
                 }
+
+                /* Added to handle combinations of DMA and CPU transfers*/
+                MAP_SPIWordCountSet(spi_config->base_addr, 0);
+
                 MAP_SPITransfer(spi_config->base_addr,
                                 (u8 *)wr_data,
                                 (u8 *)rd_data,

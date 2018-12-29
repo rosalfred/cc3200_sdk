@@ -1,7 +1,7 @@
 /*
  * wlan.h - CC31xx/CC32xx Host Driver Implementation
  *
- * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/ 
+ * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/ 
  * 
  * 
  *  Redistribution and use in source and binary forms, with or without 
@@ -33,14 +33,16 @@
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
 */
-    
-#ifndef __WLAN_H__
-#define    __WLAN_H__
 
 /*****************************************************************************/
 /* Include files                                                             */
 /*****************************************************************************/
 #include "simplelink.h"
+    
+#ifndef __WLAN_H__
+#define    __WLAN_H__
+
+
 
 
 #ifdef    __cplusplus
@@ -59,72 +61,50 @@ extern "C" {
 
 */
 
-#define SL_BSSID_LENGTH                                                                                    (6)
-#define MAXIMAL_SSID_LENGTH                                                                                (32)
+#define SL_BSSID_LENGTH           (6)
+#define MAXIMAL_SSID_LENGTH       (32)
 
-#define NUM_OF_RATE_INDEXES                                                                             (20)
-#define SIZE_OF_RSSI_HISTOGRAM                                                                          (6)
+#define NUM_OF_RATE_INDEXES       (20)
+#define SIZE_OF_RSSI_HISTOGRAM    (6)
  
 /* WLAN Disconnect Reason Codes */
-#define  SL_DISCONNECT_RESERVED_0                                                                       (0)
-#define  SL_DISCONNECT_UNSPECIFIED_REASON                                                               (1)
-#define  SL_PREVIOUS_AUTHENTICATION_NO_LONGER_VALID                                                     (2)
-#define  SL_DEAUTHENTICATED_BECAUSE_SENDING_STATION_IS_LEAVING                                          (3)
-#define  SL_DISASSOCIATED_DUE_TO_INACTIVITY                                                             (4)
-#define  SL_DISASSOCIATED_BECAUSE_AP_IS_UNABLE_TO_HANDLE_ALL_CURRENTLY_ASSOCIATED_STATIONS              (5)
-#define  SL_CLASS_2_FRAME_RECEIVED_FROM_NONAUTHENTICATED_STATION                                        (6)
-#define  SL_CLASS_3_FRAME_RECEIVED_FROM_NONASSOCIATED_STATION                                           (7)
-#define  SL_DISASSOCIATED_BECAUSE_SENDING_STATION_IS_LEAVING_BSS                                        (8)
-#define  SL_STATION_REQUESTING_ASSOCIATION_IS_NOT_AUTHENTICATED_WITH_RESPONDING_STATION                 (9)
-#define  SL_DISASSOCIATED_BECAUSE_THE_INFORMATION_IN_THE_POWER_CAPABILITY_ELEMENT_IS_UNACCEPTABLE       (10)
-#define  SL_DISASSOCIATED_BECAUSE_THE_INFORMATION_IN_THE_SUPPORTED_CHANNELS_ELEMENT_IS_UNACCEPTABLE     (11)
-#define  SL_DISCONNECT_RESERVED_1                                                                       (12)
-#define  SL_INVALID_INFORMATION_ELEMENT                                                                 (13)
-#define  SL_MESSAGE_INTEGRITY_CODE_MIC_FAILURE                                                          (14)
-#define  SL_FOUR_WAY_HANDSHAKE_TIMEOUT                                                                  (15)
-#define  SL_GROUP_KEY_HANDSHAKE_TIMEOUT                                                                 (16)
-#define  SL_RE_ASSOCIATION_REQUEST_PROBE_RESPONSE_BEACON_FRAME                                          (17)
-#define  SL_INVALID_GROUP_CIPHER                                                                        (18)
-#define  SL_INVALID_PAIRWISE_CIPHER                                                                     (19)
-#define  SL_INVALID_AKMP                                                                                (20)
-#define  SL_UNSUPPORTED_RSN_INFORMATION_ELEMENT_VERSION                                                 (21)
-#define  SL_INVALID_RSN_INFORMATION_ELEMENT_CAPABILITIES                                                (22)
-#define  SL_IEEE_802_1X_AUTHENTICATION_FAILED                                                           (23)
-#define  SL_CIPHER_SUITE_REJECTED_BECAUSE_OF_THE_SECURITY_POLICY                                        (24)
-#define  SL_DISCONNECT_RESERVED_2                                                                       (25)
-#define  SL_DISCONNECT_RESERVED_3                                                                       (26)
-#define  SL_DISCONNECT_RESERVED_4                                                                       (27)
-#define  SL_DISCONNECT_RESERVED_5                                                                       (28)
-#define  SL_DISCONNECT_RESERVED_6                                                                       (29)
-#define  SL_DISCONNECT_RESERVED_7                                                                       (30)
-#define  SL_DISCONNECT_RESERVED_8                                                                       (31)
-#define  SL_DISASSOCIATED_FOR_UNSPECIFIED_QOS_RELATED_REASON                                            (32)
-#define  SL_DISASSOCIATED_BECAUSE_QAP_LACKS_SUFFICIENT_BANDWIDTH_FOR_THIS_QSTA                          (33)
-#define  SL_DISASSOCIATED_BECAUSE_EXCESSIVE_NUMBER_OF_FRAMES_NEED_TO_BE_ACKNOWLEDGED                    (34)
-#define  SL_DISASSOCIATED_BECAUSE_QSTA_IS_TRANSMITTING_OUTSIDE_THE_LIMITS_OF_ITS_TXOPS                  (35)
-#define  SL_REQUESTED_FROM_PEER_QSTA_AS_THE_QSTA_IS_LEAVING_THE_QBSS                                     (36)
-#define  SL_REQUESTED_FROM_PEER_QSTA_AS_IT_DOES_NO_WANT_TO_USE_THE_MECHANISM                            (37)
-#define  SL_REQUESTED_FROM_PEER_QSTA_AS_THE_QSTA_RECEIVED_FRAMES_SETUP_IS_REQUIRED                      (38)
-#define  SL_REQUESTED_FROM_PEER_QSTA_DUE_TO_TIMEOUT                                                     (39)
-#define  SL_PEER_QSTA_DOES_NOT_SUPPORT_THE_REQUESTED_CIPHER_SUITE                                       (40)
-#define  SL_CISCO_DEFINED                                                                               (98)
-#define  SL_CISCO_DEFINED_1                                                                             (99)
-#define  SL_ROAMING_TRIGGER_NONE                                                                        (100)
-#define  SL_ROAMING_TRIGGER_LOW_QUALITY_FOR_BG_SCAN                                                     (101)
-#define  SL_ROAMING_TRIGGER_HIGH_QUALITY_FOR_BG_SCAN                                                    (102)
-#define  SL_ROAMING_TRIGGER_NORMAL_QUALITY_FOR_BG_SCAN                                                  (103)
-#define  SL_ROAMING_TRIGGER_LOW_TX_RATE                                                                 (104)
-#define  SL_ROAMING_TRIGGER_LOW_SNR                                                                     (105)
-#define  SL_ROAMING_TRIGGER_LOW_QUALITY                                                                 (106)
-#define  SL_ROAMING_TRIGGER_TSPEC_REJECTED                                                              (107)
-#define  SL_ROAMING_TRIGGER_MAX_TX_RETRIES                                                              (108)
-#define  SL_ROAMING_TRIGGER_BSS_LOSS                                                                    (109)
-#define  SL_ROAMING_TRIGGER_BSS_LOSS_DUE_TO_MAX_TX_RETRY                                                (110)
-#define  SL_ROAMING_TRIGGER_SWITCH_CHANNEL                                                              (111)
-#define  SL_ROAMING_TRIGGER_AP_DISCONNECT                                                               (112)
-#define  SL_ROAMING_TRIGGER_SECURITY_ATTACK                                                             (113)
-#define  SL_ROAMING_TRIGGER_MAX                                                                         (114)
-#define  SL_USER_INITIATED_DISCONNECTION                                                                (200)
+#define  SL_WLAN_DISCONNECT_UNSPECIFIED_REASON                             (1)
+#define  SL_WLAN_DISCONNECT_PREV_AUTH_NOT_VALID                            (2)
+#define  SL_WLAN_DISCONNECT_DEAUTH_LEAVING                                 (3)
+#define  SL_WLAN_DISCONNECT_DISASSOC_DUE_TO_INACTIVITY                     (4)
+#define  SL_WLAN_DISCONNECT_DISASSOC_AP_BUSY                               (5)
+#define  SL_WLAN_DISCONNECT_CLASS2_FRAME_FROM_NONAUTH_STA                  (6)
+#define  SL_WLAN_DISCONNECT_CLASS3_FRAME_FROM_NONASSOC_STA                 (7)
+#define  SL_WLAN_DISCONNECT_DISASSOC_STA_HAS_LEFT                          (8)
+#define  SL_WLAN_DISCONNECT_STA_REQ_ASSOC_WITHOUT_AUTH                     (9)
+#define  SL_WLAN_DISCONNECT_PWR_CAPABILITY_NOT_VALID                       (10)
+#define  SL_WLAN_DISCONNECT_SUPPORTED_CHANNEL_NOT_VALID                    (11)
+#define  SL_WLAN_DISCONNECT_INVALID_IE                                     (13)
+#define  SL_WLAN_DISCONNECT_MIC_FAILURE                                    (14)
+#define  SL_WLAN_DISCONNECT_4WAY_HANDSHAKE_TIMEOUT                         (15)
+#define  SL_WLAN_DISCONNECT_GROUP_KEY_UPDATE_TIMEOUT                       (16)
+#define  SL_WLAN_DISCONNECT_IE_IN_4WAY_DIFFERS                             (17)
+#define  SL_WLAN_DISCONNECT_GROUP_CIPHER_NOT_VALID                         (18)
+#define  SL_WLAN_DISCONNECT_PAIRWISE_CIPHER_NOT_VALID                      (19)
+#define  SL_WLAN_DISCONNECT_AKMP_NOT_VALID                                 (20)
+#define  SL_WLAN_DISCONNECT_UNSUPPORTED_RSN_IE_VERSION                     (21)
+#define  SL_WLAN_DISCONNECT_INVALID_RSN_IE_CAPAB                           (22)
+#define  SL_WLAN_DISCONNECT_IEEE_802_1X_AUTH_FAILED                        (23)
+#define  SL_WLAN_DISCONNECT_CIPHER_SUITE_REJECTED                          (24)
+#define  SL_WLAN_DISCONNECT_DISASSOC_LOW_ACK                               (34)
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_NONE                           (100)                             
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_LOW_TX_RATE                    (104)         
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_LOW_SNR                        (105)               
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_LOW_QUALITY                    (106)               
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_TSPEC_REJECTED                 (107)        
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_MAX_TX_RETRIES                 (108)         
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_BSS_LOSS                       (109)         
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_BSS_LOSS_DUE_TO_MAX_TX_RETRY   (110)
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_SWITCH_CHANNEL                 (111)         
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_AP_DISCONNECT                  (112)               
+#define  SL_WLAN_DISCONNECT_ROAMING_TRIGGER_SECURITY_ATTACK                (113)         
+#define  SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION                   (200)
+
 
 /* Wlan error codes */
 #define  SL_ERROR_KEY_ERROR                                                                             (-3)
@@ -155,8 +135,8 @@ extern "C" {
 #define SL_SEC_TYPE_WPS_PIN                                                                             (4)
 #define SL_SEC_TYPE_WPA_ENT                                                                             (5)
 #define SL_SEC_TYPE_P2P_PBC                                                                             (6)
-#define SL_SEC_TYPE_P2P_PIN_KEYPAD                                                                      (7)
-#define SL_SEC_TYPE_P2P_PIN_DISPLAY                                                                     (8)
+#define SL_SEC_TYPE_P2P_PIN_KEYPAD                                                                        (7)
+#define SL_SEC_TYPE_P2P_PIN_DISPLAY                                                                        (8)
 #define SL_SEC_TYPE_P2P_PIN_AUTO                                                                        (9) /* NOT Supported yet */
 
 
@@ -166,7 +146,6 @@ extern "C" {
 #define SL_SCAN_SEC_TYPE_WPA                                                                            (2) 
 #define SL_SCAN_SEC_TYPE_WPA2                                                                           (3)
 
-  
   
 #define TLS                                (0x1)
 #define MSCHAP                             (0x0)
@@ -310,6 +289,54 @@ extern "C" {
 
 #define INFO_ELEMENT_DEFAULT_OUI             (0x000000)  /* 08, 00, 28 will be used */
 
+
+
+
+/**************************************************
+For backward compatability (version 1.0.0.10)
+**************************************************/
+#define SL_DISCONNECT_UNSPECIFIED_REASON															SL_WLAN_DISCONNECT_UNSPECIFIED_REASON                                                   
+#define SL_PREVIOUS_AUTHENTICATION_NO_LONGER_VALID													SL_WLAN_DISCONNECT_PREV_AUTH_NOT_VALID                                     
+#define SL_DEAUTHENTICATED_BECAUSE_SENDING_STATION_IS_LEAVING										SL_WLAN_DISCONNECT_DEAUTH_LEAVING                
+#define SL_DISASSOCIATED_DUE_TO_INACTIVITY															SL_WLAN_DISCONNECT_DISASSOC_DUE_TO_INACTIVITY                     
+#define SL_DISASSOCIATED_BECAUSE_AP_IS_UNABLE_TO_HANDLE_ALL_CURRENTLY_ASSOCIATED_STATIONS			SL_WLAN_DISCONNECT_DISASSOC_AP_BUSY   
+#define SL_CLASS_2_FRAME_RECEIVED_FROM_NONAUTHENTICATED_STATION										SL_WLAN_DISCONNECT_CLASS2_FRAME_FROM_NONAUTH_STA      
+#define SL_CLASS_3_FRAME_RECEIVED_FROM_NONASSOCIATED_STATION										SL_WLAN_DISCONNECT_CLASS3_FRAME_FROM_NONASSOC_STA
+#define SL_DISASSOCIATED_BECAUSE_SENDING_STATION_IS_LEAVING_BSS										SL_WLAN_DISCONNECT_DISASSOC_STA_HAS_LEFT
+#define SL_STATION_REQUESTING_ASSOCIATION_IS_NOT_AUTHENTICATED_WITH_RESPONDING_STATION				SL_WLAN_DISCONNECT_STA_REQ_ASSOC_WITHOUT_AUTH
+#define SL_DISASSOCIATED_BECAUSE_THE_INFORMATION_IN_THE_POWER_CAPABILITY_ELEMENT_IS_UNACCEPTABLE    SL_WLAN_DISCONNECT_PWR_CAPABILITY_NOT_VALID
+#define SL_DISASSOCIATED_BECAUSE_THE_INFORMATION_IN_THE_SUPPORTED_CHANNELS_ELEMENT_IS_UNACCEPTABLE  SL_WLAN_DISCONNECT_SUPPORTED_CHANNEL_NOT_VALID
+#define SL_INVALID_INFORMATION_ELEMENT																SL_WLAN_DISCONNECT_INVALID_IE
+#define SL_MESSAGE_INTEGRITY_CODE_MIC_FAILURE														SL_WLAN_DISCONNECT_MIC_FAILURE
+#define SL_FOUR_WAY_HANDSHAKE_TIMEOUT																SL_WLAN_DISCONNECT_4WAY_HANDSHAKE_TIMEOUT
+#define SL_GROUP_KEY_HANDSHAKE_TIMEOUT																SL_WLAN_DISCONNECT_GROUP_KEY_UPDATE_TIMEOUT 
+#define SL_RE_ASSOCIATION_REQUEST_PROBE_RESPONSE_BEACON_FRAME										SL_WLAN_DISCONNECT_IE_IN_4WAY_DIFFERS
+#define SL_INVALID_GROUP_CIPHER																		SL_WLAN_DISCONNECT_GROUP_CIPHER_NOT_VALID    
+#define SL_INVALID_PAIRWISE_CIPHER																	SL_WLAN_DISCONNECT_PAIRWISE_CIPHER_NOT_VALID
+#define SL_INVALID_AKMP																				SL_WLAN_DISCONNECT_AKMP_NOT_VALID
+#define SL_UNSUPPORTED_RSN_INFORMATION_ELEMENT_VERSION												SL_WLAN_DISCONNECT_UNSUPPORTED_RSN_IE_VERSION
+#define SL_INVALID_RSN_INFORMATION_ELEMENT_CAPABILITIES												SL_WLAN_DISCONNECT_INVALID_RSN_IE_CAPAB
+#define SL_IEEE_802_1X_AUTHENTICATION_FAILED														SL_WLAN_DISCONNECT_IEEE_802_1X_AUTH_FAILED
+#define SL_CIPHER_SUITE_REJECTED_BECAUSE_OF_THE_SECURITY_POLICY										SL_WLAN_DISCONNECT_CIPHER_SUITE_REJECTED
+#define SL_USER_INITIATED_DISCONNECTION																SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION
+
+
+#define SL_DISCONNECT_RESERVED_0    (0)
+#define SL_DISCONNECT_RESERVED_1	(12)
+#define SL_DISCONNECT_RESERVED_2	(26)
+#define SL_DISCONNECT_RESERVED_3    (27)
+#define SL_DISCONNECT_RESERVED_4	(28)
+#define SL_DISCONNECT_RESERVED_5	(29)
+#define SL_DISCONNECT_RESERVED_6	(30)
+#define SL_DISCONNECT_RESERVED_7	(31)
+#define SL_DISCONNECT_RESERVED_8	(32)
+
+/******************************
+End of backward compatability.
+*******************************/
+
+
+
 /*****************************************************************************/
 /* Structure/Enum declarations                                               */
 /*****************************************************************************/
@@ -417,7 +444,7 @@ typedef struct
 {
     _u32  ReceivedValidPacketsNumber;                     /* sum of the packets that been received OK (include filtered) */
     _u32  ReceivedFcsErrorPacketsNumber;                  /* sum of the packets that been dropped due to FCS error */ 
-    _u32  ReceivedPlcpErrorPacketsNumber;                 /* sum of the packets that been dropped due to PLCP error */
+    _u32  ReceivedAddressMismatchPacketsNumber;           /* sum of the packets that been received but filtered out by one of the HW filters */
     _i16  AvarageDataCtrlRssi;                            /* average RSSI for all valid data packets received */
     _i16  AvarageMgMntRssi;                               /* average RSSI for all valid management packets received */
     _u16  RateHistogram[NUM_OF_RATE_INDEXES];             /* rate histogram for all valid packets received */
@@ -461,19 +488,22 @@ typedef struct
     _u8   UserLen;
     _i8   AnonUser[32];
     _u8   AnonUserLen;
-    _u8   CertIndex;  //not supported
+    _u8   CertIndex;  /* not supported */
     _u32  EapMethod;
 }SlGetSecParamsExt_t;
 
 typedef enum
 {
-    ROLE_STA   =   0,
-    ROLE_AP    =   2,
-    ROLE_P2P     =   3,
-    ROLE_STA_ERR =  -1,         /* Failure to load MAC/PHY in STA role */
-    ROLE_AP_ERR  =  -ROLE_AP,   /* Failure to load MAC/PHY in AP role */
-    ROLE_P2P_ERR =  -ROLE_P2P   /* Failure to load MAC/PHY in P2P role */
-}SlWlanMode_t;
+    ROLE_STA       =   0,
+    ROLE_UNKNOWN   =   1,
+    ROLE_AP        =   2,
+    ROLE_P2P     =     3,
+    ROLE_STA_ERR =    -1,    /* Failure to load MAC/PHY in STA role */
+    ROLE_AP_ERR  =    -2,    /* Failure to load MAC/PHY in AP role */
+    ROLE_P2P_ERR =    -3,    /* Failure to load MAC/PHY in P2P role */
+    INIT_CALIB_FAIL = -4     /* Failure of calibration */
+}SlWlanMode_e;
+
 
 typedef struct
 {
@@ -505,19 +535,19 @@ typedef struct
 
 /*!
     \brief Connect to wlan network as a station
-    
-    \param[in]      sec_type    security types options: \n
-                                - SL_SEC_TYPE_OPEN
-                                - SL_SEC_TYPE_WEP
-                                - SL_SEC_TYPE_WPA_WPA2
-                                - SL_SEC_TYPE_WPA_ENT
-                                - SL_SEC_TYPE_WPS_PBC
-                                - SL_SEC_TYPE_WPS_PIN
      
     \param[in]      pName       up to 32 bytes in case of STA the name is the SSID of the Access Point
     \param[in]      NameLen     name length
     \param[in]      pMacAddr    6 bytes for MAC address
     \param[in]      pSecParams  Security parameters (use NULL key for SL_SEC_TYPE_OPEN)
+                                Security types options: \n
+                                - SL_SEC_TYPE_OPEN
+                                - SL_SEC_TYPE_WEP
+                                - SL_SEC_TYPE_WPA_WPA2
+                                - SL_SEC_TYPE_WPA_ENT
+                                - SL_SEC_TYPE_WPS_PBC
+                                - SL_SEC_TYPE_WPS_PIN    
+    
     \param[in]      pSecExtParams  Enterprise parameters (set NULL in case Enterprise parameters is not in use)
     
     \return         On success, zero is returned. On error, negative is returned
@@ -529,7 +559,7 @@ typedef struct
                     SL_SEC_TYPE_WPA is a deprecated definition, the new definition is SL_SEC_TYPE_WPA_WPA2
 */ 
 #if _SL_INCLUDE_FUNC(sl_WlanConnect)
-_i16 sl_WlanConnect(_i8*  pName, _i16 NameLen, _u8 *pMacAddr, SlSecParams_t* pSecParams , SlSecParamsExt_t* pSecExtParams);
+_i16 sl_WlanConnect(const _i8*  pName,const  _i16 NameLen,const _u8 *pMacAddr,const SlSecParams_t* pSecParams ,const SlSecParamsExt_t* pSecExtParams);
 #endif
 
 /*!
@@ -586,7 +616,7 @@ _i16 sl_WlanDisconnect(void);
 
 */
 #if _SL_INCLUDE_FUNC(sl_WlanProfileAdd)
-_i16 sl_WlanProfileAdd(_i8*  pName, _i16 NameLen, _u8 *pMacAddr, SlSecParams_t* pSecParams , SlSecParamsExt_t* pSecExtParams, _u32  Priority, _u32  Options);
+_i16 sl_WlanProfileAdd(const _i8*  pName,const  _i16 NameLen,const _u8 *pMacAddr,const SlSecParams_t* pSecParams ,const SlSecParamsExt_t* pSecExtParams,const _u32 Priority,const _u32  Options);
 #endif
 
 /*!
@@ -601,8 +631,8 @@ _i16 sl_WlanProfileAdd(_i8*  pName, _i16 NameLen, _u8 *pMacAddr, SlSecParams_t* 
     \param[out]     pNameLen       name length 
     \param[out]     pMacAddr       6 bytes for MAC address
     \param[out]     pSecParams     security parameters - security type 
-                                   (LAN_SEC_UNSEC, WLAN_SEC_WEP, WLAN_SEC_WPA or
-                                   WLAN_SEC_WPA2, WLAN_SEC_P2P_PBC, WLAN_SEC_P2P_PIN_KEYPAD or WLAN_SEC_P2P_DISPLAY), key and key length are not 
+                                   (SL_SEC_TYPE_OPEN, SL_SEC_TYPE_WEP, SL_SEC_TYPE_WPA_WPA2 or
+                                   SL_SEC_TYPE_WPS_PBC, SL_SEC_TYPE_WPS_PIN, SL_SEC_TYPE_WPA_ENT,SL_SEC_TYPE_P2P_PBC,SL_SEC_TYPE_P2P_PIN_KEYPAD or SL_SEC_TYPE_P2P_PIN_DISPLAY), key and key length are not                  
                                    in case of p2p security type pin the key refers to pin code
                                    return due to security reasons.
     \param[out]     pSecExtParams  enterprise parameters - identity, identity 
@@ -618,7 +648,7 @@ _i16 sl_WlanProfileAdd(_i8*  pName, _i16 NameLen, _u8 *pMacAddr, SlSecParams_t* 
     \warning     
 */
 #if _SL_INCLUDE_FUNC(sl_WlanProfileGet)
-_i16 sl_WlanProfileGet(_i16 Index,_i8*  pName, _i16 *pNameLen, _u8 *pMacAddr, SlSecParams_t* pSecParams, SlGetSecParamsExt_t* pSecExtParams, _u32 *pPriority);
+_i16 sl_WlanProfileGet(const _i16 Index,_i8*  pName, _i16 *pNameLen, _u8 *pMacAddr, SlSecParams_t* pSecParams, SlGetSecParamsExt_t* pSecExtParams, _u32 *pPriority);
 #endif
 
 /*!
@@ -637,7 +667,7 @@ _i16 sl_WlanProfileGet(_i16 Index,_i8*  pName, _i16 *pNameLen, _u8 *pMacAddr, Sl
     \warning     
 */
 #if _SL_INCLUDE_FUNC(sl_WlanProfileDel)
-_i16 sl_WlanProfileDel(_i16 Index);
+_i16 sl_WlanProfileDel(const _i16 Index);
 #endif
 
 /*!
@@ -672,7 +702,7 @@ _i16 sl_WlanProfileDel(_i16 Index);
        <b> sl_WlanPolicySet(SL_POLICY_CONNECTION,SL_CONNECTION_POLICY(0,0,0,0,1),NULL,0) </b> \n
     The options above could be combined to a single action, if more than one action is required. \n
     \par 
-    SL_POLICY_SCAN defines system scan time interval in case there is no connection. Default interval is 10 minutes. \n
+    SL_POLICY_SCAN defines system scan time interval.Default interval is 10 minutes. \n
     After settings scan interval, an immediate scan is activated. The next scan will be based on the interval settings. \n
                     -  For example, setting scan interval to 1 minute interval use: \n
                        _u32 intervalInSeconds = 60;    \n
@@ -706,7 +736,7 @@ _i16 sl_WlanProfileDel(_i16 Index);
 
 */
 #if _SL_INCLUDE_FUNC(sl_WlanPolicySet)
-_i16 sl_WlanPolicySet(_u8 Type , const _u8 Policy, _u8 *pVal,_u8 ValLen);
+_i16 sl_WlanPolicySet(const _u8 Type , const _u8 Policy, _u8 *pVal,const _u8 ValLen);
 #endif
 /*!
     \brief get policy values
@@ -729,7 +759,7 @@ _i16 sl_WlanPolicySet(_u8 Type , const _u8 Policy, _u8 *pVal,_u8 ValLen);
 
 */
 #if _SL_INCLUDE_FUNC(sl_WlanPolicyGet)
-_i16 sl_WlanPolicyGet(_u8 Type , _u8 Policy,_u8 *pVal,_u8 *pValLen);
+_i16 sl_WlanPolicyGet(const _u8 Type , _u8 Policy,_u8 *pVal,_u8 *pValLen);
 #endif
 /*!
     \brief Gets the WLAN scan operation results
@@ -760,7 +790,7 @@ _i16 sl_WlanPolicyGet(_u8 Type , _u8 Policy,_u8 *pVal,_u8 *pValLen);
     \endcode
 */
 #if _SL_INCLUDE_FUNC(sl_WlanGetNetworkList)
-_i16 sl_WlanGetNetworkList(_u8 Index, _u8 Count, Sl_WlanNetworkEntry_t *pEntries);
+_i16 sl_WlanGetNetworkList(const _u8 Index,const  _u8 Count, Sl_WlanNetworkEntry_t *pEntries);
 #endif
 
 /*!
@@ -770,7 +800,7 @@ _i16 sl_WlanGetNetworkList(_u8 Index, _u8 Count, Sl_WlanNetworkEntry_t *pEntries
     
     \sa     sl_WlanRxStatStop      sl_WlanRxStatGet
     \note   belongs to \ref ext_api        
-    \warning  This API is deprecated and should be removed for next release
+    \warning  
     \par        Example:
     \code       Getting wlan RX statistics:             
 
@@ -810,7 +840,7 @@ _i16 sl_WlanRxStatStart(void);
     
     \sa     sl_WlanRxStatStart      sl_WlanRxStatGet
     \note           belongs to \ref ext_api        
-    \warning  This API is deprecated and should be removed for next release   
+    \warning  
 */
 #if _SL_INCLUDE_FUNC(sl_WlanRxStatStop)
 _i16 sl_WlanRxStatStop(void);
@@ -829,7 +859,7 @@ _i16 sl_WlanRxStatStop(void);
     \warning     
 */
 #if _SL_INCLUDE_FUNC(sl_WlanRxStatGet)
-_i16 sl_WlanRxStatGet(SlGetRxStatResponse_t *pRxStat,_u32 Flags);
+_i16 sl_WlanRxStatGet(SlGetRxStatResponse_t *pRxStat,const _u32 Flags);
 #endif
 
 
@@ -844,7 +874,7 @@ _i16 sl_WlanRxStatGet(SlGetRxStatResponse_t *pRxStat,_u32 Flags);
     
     \sa         sl_WlanSmartConfigStart         
     \note           belongs to \ref ext_api        
-    \warning      This API is deprecated and should be removed for next release   
+    \warning        
     
 */
 #if _SL_INCLUDE_FUNC(sl_WlanSmartConfigStop)
@@ -980,6 +1010,9 @@ _i16 sl_WlanSetMode(const _u8    mode);
                                       for WEP: 5 / 13 characters (ascii) \n
                                       This options takes <b>_u8</b> buffer as parameter 
                           - <b>SL_WLAN_CFG_GENERAL_PARAM_ID</b>
+                              - <b> WLAN_GENERAL_PARAM_OPT_SCAN_PARAMS </b> \n
+                                      Set scan parameters.
+                                      This option uses slWlanScanParamCommand_t as parameter
                               - <b>WLAN_GENERAL_PARAM_OPT_COUNTRY_CODE</b> \n
                                       Set Country Code for AP mode \n
                                       This options takes <b>_u8</b> 2 bytes buffer as parameter 
@@ -1065,6 +1098,15 @@ _i16 sl_WlanSetMode(const _u8    mode);
          _u8  stapower=(_u8)power;
          sl_WlanSet(SL_WLAN_CFG_GENERAL_PARAM_ID, WLAN_GENERAL_PARAM_OPT_STA_TX_POWER,1,(_u8 *)&stapower);
     \endcode
+    \par   
+          <b> WLAN_GENERAL_PARAM_OPT_SCAN_PARAMS: </b>
+    \code   
+          slWlanScanParamCommand_t ScanParamConfig;
+          ScanParamConfig.G_Channels_mask = 0x01;  // bit mask for channels:1 means channel 1 is enabled, 3 means channels 1 + 2 are enabled
+          ScanParamConfig.rssiThershold = -70;     // only for RSSI level which is higher than -70
+          sl_WlanSet(SL_WLAN_CFG_GENERAL_PARAM_ID ,WLAN_GENERAL_PARAM_OPT_SCAN_PARAMS,sizeof(slWlanScanParamCommand_t),(_u8*)&ScanParamConfig);
+    \endcode
+
    \par
           <b> WLAN_GENERAL_PARAM_OPT_COUNTRY_CODE: </b>
     \code
@@ -1119,7 +1161,7 @@ _i16 sl_WlanSetMode(const _u8    mode);
 
 */
 #if _SL_INCLUDE_FUNC(sl_WlanSet)
-_i16 sl_WlanSet(_u16 ConfigId ,_u16 ConfigOpt,_u16 ConfigLen, _u8 *pValues);
+_i16 sl_WlanSet(const _u16 ConfigId ,const _u16 ConfigOpt,const _u16 ConfigLen,const  _u8 *pValues);
 #endif
 
 /*!
@@ -1214,17 +1256,17 @@ _i16 sl_WlanSet(_u16 ConfigId ,_u16 ConfigOpt,_u16 ConfigLen, _u8 *pValues);
     \par   
            <b> WLAN_GENERAL_PARAM_OPT_AP_TX_POWER: </b>
     \code
-           _i16 TXPower = 0;
+           _i8 TXPower = 0;
            _u16 Option = WLAN_GENERAL_PARAM_OPT_AP_TX_POWER;
-           _u16 OptionLen = sizeof(_i16);
+           _u16 OptionLen = sizeof(_i8);
            sl_WlanGet(SL_WLAN_CFG_GENERAL_PARAM_ID ,&Option,&OptionLen,(_u8 *)&TXPower);
     \endcode
     \par   
            <b> WLAN_GENERAL_PARAM_OPT_STA_TX_POWER: </b>
     \code           
-           _i16 TXPower = 0;
+           _i8 TXPower = 0;
            _u16 Option = WLAN_GENERAL_PARAM_OPT_STA_TX_POWER;
-           _u16 OptionLen = sizeof(_i16);
+           _u16 OptionLen = sizeof(_i8);
  
            sl_WlanGet(SL_WLAN_CFG_GENERAL_PARAM_ID ,&Option,&OptionLen,(_u8 *)&TXPower);
     \endcode
@@ -1302,7 +1344,7 @@ _i16 sl_WlanSet(_u16 ConfigId ,_u16 ConfigOpt,_u16 ConfigLen, _u8 *pValues);
 */
 
 #if _SL_INCLUDE_FUNC(sl_WlanGet)
-_i16 sl_WlanGet(_u16 ConfigId, _u16 *pConfigOpt,_u16 *pConfigLen, _u8 *pValues);
+_i16 sl_WlanGet(const _u16 ConfigId, _u16 *pConfigOpt,_u16 *pConfigLen, _u8 *pValues);
 #endif
 /*!
 

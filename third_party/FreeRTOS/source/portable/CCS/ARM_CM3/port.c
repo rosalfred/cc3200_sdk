@@ -663,16 +663,30 @@ __attribute__(( weak )) void vPortSetupTimerInterrupt( void )
 }
 /*-----------------------------------------------------------*/
 
+
 #if( configASSERT_DEFINED == 1 )
+extern unsigned long ipsrFunc(void);
+
+	__asm("    .sect \".text:ipsrFunc\"\n"
+          "    .clink\n"
+          "    .thumbfunc ipsrFunc\n"
+          "    .thumb\n"
+          "    .global ipsrFunc\n"
+          "ipsrFunc:\n"
+          "    mrs     r0, ipsr\n"
+          "    bx lr\n");
 
 	void vPortValidateInterruptPriority( void )
 	{
 	uint32_t ulCurrentInterrupt;
 	uint8_t ucCurrentPriority;
 
-		/* Obtain the number of the currently executing interrupt. */
+#if defined(ccs)
+	ulCurrentInterrupt = ipsrFunc();
+#else
+	/* Obtain the number of the currently executing interrupt. */
 		__asm volatile( "mrs %0, ipsr" : "=r"( ulCurrentInterrupt ) );
-
+#endif
 		/* Is the interrupt number a user defined interrupt? */
 		if( ulCurrentInterrupt >= portFIRST_USER_INTERRUPT_NUMBER )
 		{

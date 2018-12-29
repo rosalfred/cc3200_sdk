@@ -4,7 +4,6 @@
 	<comment></comment>
 	<projects>
 		<project>ti_rtos_config</project>
-		<project>libEmail</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
@@ -41,6 +40,11 @@
 			<name>main.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/main.c</locationURI>
+		</link>
+		<link>
+			<name>network_common.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/common/network_common.c</locationURI>
 		</link>
 		<link>
 			<name>network_if.c</name>

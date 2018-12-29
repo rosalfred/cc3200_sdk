@@ -72,7 +72,7 @@
 
 #include "pinmux.h"
 
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 #define DBG_PRINT               Report
 //
 // The PWM works based on the following settings:

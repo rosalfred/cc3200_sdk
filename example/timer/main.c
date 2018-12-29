@@ -85,7 +85,7 @@
 //*****************************************************************************
 //                      MACRO DEFINITIONS
 //*****************************************************************************
-#define APPLICATION_VERSION        "1.1.0"
+#define APPLICATION_VERSION        "1.1.1"
 #define FOREVER                    1
 
 //*****************************************************************************
@@ -234,12 +234,11 @@ main(void)
     Timer_IF_IntSetup(g_ulRefBase, TIMER_A, TimerRefIntHandler);
 
     //
-    // Turn on the timers
+    // Turn on the timers feeding values in mSec
     //
-    Timer_IF_Start(g_ulBase, TIMER_A,
-                  PERIODIC_TEST_CYCLES * PERIODIC_TEST_LOOPS / 10);
-    Timer_IF_Start(g_ulRefBase, TIMER_A,
-                  PERIODIC_TEST_CYCLES * PERIODIC_TEST_LOOPS / 20);
+    Timer_IF_Start(g_ulBase, TIMER_A, 500);
+    Timer_IF_Start(g_ulRefBase, TIMER_A, 1000);
+	
     //
     // Loop forever while the timers run.
     //

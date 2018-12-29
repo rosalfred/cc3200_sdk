@@ -56,19 +56,13 @@ struct cc_uart_state{
 		struct cc_uart_config uart_config;
         /* reading related parameters */
         uint8_t *rd_buff;
-        uint32_t rd_num_wrds;
-        uint8_t rd_num_byts;
-        uint8_t rd_wrd_size;
-        uint32_t rd_wrds_done;
+        uint32_t rd_num_byts;
         uint32_t rd_byts_done;
         enum cc_boolean rd_done;
 
         /* writing related parameters */
         uint8_t *wrt_buff;
-        uint32_t wrt_num_wrds;
-        uint8_t wrt_num_byts;
-        uint8_t wrt_wrd_size;
-        uint32_t wrt_wrds_done;
+        uint32_t wrt_num_byts;
         uint32_t wrt_byts_done;
         enum cc_boolean wrt_done;
 
@@ -152,94 +146,62 @@ void cc_uart_isr(cc_hndl uart_hndl)
         uint32_t uiIntStat;
         int8_t temp;
         u32 disable = 0;
-        uint32_t i,y= 0;
         struct cc_uart_state *uart_state = (struct cc_uart_state *)uart_hndl;
         struct cc_uart_config *uart_config = (struct cc_uart_config *)&(uart_state->uart_config);
         uint32_t base_addr = uart_config->module_info.base_addr;
         uiIntStat = MAP_UARTIntStatus(base_addr, 1);
 
-        if(uiIntStat & 0x800){
-        		MAP_UARTIntClear(base_addr, 0x800);
-        	    MAP_UARTIntDisable(base_addr, 0x800);
-        		/* Invoke the callback */
-        		goto invoke_wr_callback;
-        }
-        /* for receive timeout case */
-        if(uiIntStat & 0x40){
-                MAP_UARTIntClear(base_addr, 0x40);
+        /* for receive timeout or fifo interrupt case */
+        if(uiIntStat & 0x50){
+                MAP_UARTIntClear(base_addr, 0x50);
                 while(uart_state->rd_num_byts != 0){
-                         temp = MAP_UARTCharGetNonBlocking(base_addr);
-                         if(-1 != temp){
-                                 y = uart_state->rd_wrds_done * uart_state->rd_wrd_size;
-                                 uart_state->rd_buff[y + uart_state->rd_byts_done] = temp;
-                                (uart_state->rd_byts_done)++;
-                                (uart_state->rd_num_byts)--;
-                        }else{
-                                break;
-                        }
+                		temp = MAP_UARTCharGetNonBlocking(base_addr);
+                	    if(-1 != temp){
+                	    		uart_state->rd_buff[uart_state->rd_byts_done] = temp;
+                	    		uart_state->rd_num_byts--;
+                	    		uart_state->rd_byts_done++;
+                	    		if(temp == '\n' || temp == '\r'){
+										if(uart_config->echo_enabled == e_true){
+												MAP_UARTCharPutNonBlocking(base_addr,'\n');
+												MAP_UARTCharPutNonBlocking(base_addr,'\r');
+										}
+										break;
+                	    		}else{
+                	    				if(uart_config->echo_enabled == e_true){
+                       	 			 	MAP_UARTCharPutNonBlocking(base_addr,temp);
+                       	 		 }
+                       	 	 }
+                	    }else{
+                	    		break;
+                	    }
                 }
-                
-                if(uart_state->rd_num_byts == 0){
+                if(temp != -1){
                 		uart_state->rd_done = e_true;
-                        MAP_UARTIntClear(base_addr, 0x40);
-                        MAP_UARTIntDisable(base_addr, 0x40);
-                        goto invoke_rd_callback;
+						MAP_UARTIntClear(base_addr, 0x50);
+						MAP_UARTIntDisable(base_addr, 0x50);
+						goto invoke_rd_callback;
                 }
         }
         
-        /* for receive interrupt(can be fifo trigger or single i8acter) */
-        if(uiIntStat & 0x10){
-                i = 0;
-                MAP_UARTIntClear(base_addr, 0x10);
-                y = uart_state->rd_wrds_done * uart_state->rd_wrd_size;
-                while(i < uart_state->rd_wrd_size){
-                	uart_state->rd_buff[y + i] =
-                			MAP_UARTCharGetNonBlocking(base_addr);
-                        i++;
-                }
-                (uart_state->rd_wrds_done)++;
-                (uart_state->rd_num_wrds)--;
-                if(uart_state->rd_num_wrds == 0){
-                        MAP_UARTIntClear(base_addr, 0x10);
-                        MAP_UARTIntDisable(base_addr, 0x10);
-                        if(uart_state->rd_num_byts == 0){
-                        	uart_state->rd_done = e_true;
-                        	goto invoke_rd_callback;
-                        }else{
-                                MAP_UARTIntEnable(base_addr, 0x40);
-                        }
-                }
-        }
-        
-        /* for transmit interrupt(can be for fifo trigger or single i8acter) */
+        /* for transmit interrupt(can be for fifo trigger or single character) */
         if(uiIntStat & 0x20){
-                i = 0;
                 MAP_UARTIntClear(base_addr, 0x20);
-                 y = (uart_config->module_info).fifo_size +
-                       (uart_state->wrt_wrds_done * uart_state->wrt_wrd_size);
-                if(uart_state->wrt_num_wrds <= 0){
-                        while(i < uart_state->wrt_num_byts){
-                                MAP_UARTCharPutNonBlocking(base_addr,
-                                				uart_state->wrt_buff[y + i]);
-                                i++;
-                        }
-                        uart_state->wrt_num_byts = 0;
-                 }else{
-                         while(i < uart_state->wrt_wrd_size){
-                                MAP_UARTCharPutNonBlocking(base_addr,uart_state->wrt_buff[y + i]);
-                                i++;
-                         }
-                         (uart_state->wrt_wrds_done)++;
-                         (uart_state->wrt_num_wrds)--;
+                while(uart_state->wrt_num_byts != 0){
+                		if(true == MAP_UARTCharPutNonBlocking(base_addr,
+                				uart_state->wrt_buff[uart_state->wrt_byts_done])){
+                				uart_state->wrt_num_byts--;
+                				uart_state->wrt_byts_done++;
+                		}else{
+                				break;
+                		}
                 }
-                
-                if(uart_state->wrt_num_wrds == 0  && uart_state->wrt_num_byts == 0 ){
-                	uart_state->wrt_done = e_true;
-                        MAP_UARTIntClear(base_addr, 0x20);
-                        MAP_UARTIntDisable(base_addr, 0x20);
-                        /* Invoke the callback */
-                        goto invoke_wr_callback;
-                        //UARTIntEnable(base_addr, 0x800);
+
+                if(uart_state->wrt_num_byts == 0){
+                		uart_state->wrt_done = e_true;
+						MAP_UARTIntClear(base_addr, 0x20);
+						MAP_UARTIntDisable(base_addr, 0x20);
+						/* Invoke the callback */
+						goto invoke_wr_callback;
                 }
         }
         
@@ -248,10 +210,6 @@ void cc_uart_isr(cc_hndl uart_hndl)
                 MAP_UARTIntClear(base_addr, 0x10000);
                 cc_uart_control(uart_state, e_start_rx_dma_transfer,
                         		&disable);
-                MAP_UARTIntDisable(base_addr, 0x10000);
-                uart_state->rd_wrds_done = uart_state->rd_num_wrds;
-                uart_state->rd_num_wrds = 0;
-                uart_state->rd_done = e_true;
                 /* Invoke the callback */
                 goto invoke_rd_callback;
         }
@@ -261,9 +219,6 @@ void cc_uart_isr(cc_hndl uart_hndl)
                 MAP_UARTIntClear(base_addr, 0x20000);
                 cc_uart_control(uart_state, e_start_tx_dma_transfer,
                                         		&disable);
-                uart_state->wrt_done = e_true;
-                MAP_UARTIntDisable(base_addr, 0x20000);
-                //UARTIntEnable(base_addr, 0x800);
                 /* Invoke the callback */
                 goto invoke_wr_callback;
         }
@@ -276,12 +231,12 @@ invoke_wr_callback:
 						NULL);
 		}
 invoke_rd_callback:
-	if((uart_config->module_info).int_callback) {
-				(uart_config->module_info).int_callback(
-					uart_config->rtos_hndl, read_complete,
-					(void *)&(uart_state->rd_done),
-					NULL);
-	}
+		if((uart_config->module_info).int_callback) {
+					(uart_config->module_info).int_callback(
+						uart_config->rtos_hndl, read_complete,
+						(void *)&(uart_state->rd_done),
+						NULL);
+		}
 }
 
 /* Initialize the UART module */
@@ -305,14 +260,17 @@ void cc_uart_configure(const struct cc_uart_config *uart_config)
 
         return;
 }
-
+i8 is_uartstate_reset = 0;
 cc31xx_hndl cc_uart_init(const struct cc_uart_config *uart_config)
 {
         cc31xx_hndl hndl;
         struct cc_uart_state *uart_state_hndl;
 
         /* Reset the UART control structure once in the begining */
-        reset_uart_state();
+        if(!is_uartstate_reset) {
+                reset_uart_state();
+                is_uartstate_reset = 1;
+        };
 
         /* Check if the module is already in use */
         uart_state_hndl = check_uart_state_inuse(uart_config);
@@ -331,18 +289,12 @@ cc31xx_hndl cc_uart_init(const struct cc_uart_config *uart_config)
         cc_uart_configure(uart_config);
 
         /* configuring reading related parameters */
-        uart_state_hndl->rd_num_wrds = 0;
         uart_state_hndl->rd_num_byts = 0;
-        uart_state_hndl->rd_wrd_size = 8;
-        uart_state_hndl->rd_wrds_done= 0;
         uart_state_hndl->rd_byts_done = 0;
         uart_state_hndl->rd_done = e_true;
 
         /* configuring writing related parameters */
-        uart_state_hndl->wrt_num_wrds = 0;
         uart_state_hndl->wrt_num_byts = 0;
-        uart_state_hndl->wrt_wrd_size = 8;
-        uart_state_hndl->wrt_wrds_done = 0;
         uart_state_hndl->wrt_byts_done = 0;
         uart_state_hndl->wrt_done = e_true;
 
@@ -370,50 +322,50 @@ i32 cc_uart_rd_submit(cc31xx_hndl hndl,uint8_t *rd_data, uint32_t rd_size,
                       void *cookie)
 {
         uint32_t base_addr;
-        uint32_t i = 0;
+        int8_t temp;
         struct cc_uart_state *uart_state = (struct cc_uart_state *)hndl;
         struct cc_uart_config *uart_config = (struct cc_uart_config *)&(uart_state->uart_config);
         base_addr = (uart_config->module_info).base_addr;
 
         uart_state->rd_buff = rd_data;
-        uart_state->rd_wrds_done= 0;
         uart_state->rd_byts_done = 0;
-        
-        
+
         switch(uart_config->rx_transfer_mode){
         case e_poll_based:
-        	uart_state->rd_done = e_false;
-                while(uart_state->rd_done != e_true){
-                		uart_state->rd_buff[i] = UartGetChar(base_addr);
-                        i++;
-                        if(i == rd_size){
-                        		uart_state->rd_done = e_true;
-                        }
+                uart_state->rd_num_byts = rd_size;
+        		uart_state->rd_done = e_false;
+                while(uart_state->rd_num_byts != 0){
+                        temp = UartGetChar(base_addr);
+                        uart_state->rd_buff[uart_state->rd_byts_done] = temp;
+                        uart_state->rd_num_byts--;
+                        uart_state->rd_byts_done++;
+                        if(temp == '\n' || temp == '\r'){
+                                if(uart_config->echo_enabled == e_true){
+                                        MAP_UARTCharPutNonBlocking(base_addr,'\n');
+                                        MAP_UARTCharPutNonBlocking(base_addr,'\r');
+                                }
+                                uart_state->rd_done = e_true;
+                                break;
+                        }else{
+                                if(uart_config->echo_enabled == e_true){
+                                        MAP_UARTCharPutNonBlocking(base_addr,temp);
+                                }
+                       	}
                 }
                 break;
 
         case e_int_based: 
-        		uart_state->rd_num_wrds = (rd_size/uart_state->rd_wrd_size);
-        		uart_state->rd_num_byts = (rd_size%uart_state->rd_wrd_size);
+        		uart_state->rd_num_byts = rd_size;
                 
         		uart_state->rd_done = e_false;
-                MAP_UARTIntClear(base_addr, 0x10);
-                MAP_UARTIntEnable(base_addr, 0x10);
-                break;
-
-        case e_dma_based:
-        		uart_state->rd_num_wrds = (rd_size/uart_state->rd_wrd_size);
-        		uart_state->rd_num_byts = (rd_size%uart_state->rd_wrd_size);
-        		uart_state->rd_done = e_false;
-                MAP_UARTIntClear(base_addr, 0x10000);
-                MAP_UARTIntEnable(base_addr, 0x10000);
+				MAP_UARTIntClear(base_addr, 0x50);
+				MAP_UARTIntEnable(base_addr, 0x50);
                 break;
 
         default:
                 return -1;
         }
-        /* waiting for the read operation to complete */
-        while(uart_state->rd_done == e_false);
+
         return 0;
 }
 
@@ -422,18 +374,13 @@ i32 cc_uart_wr_submit(cc31xx_hndl hndl,uint8_t *wrt_data, uint32_t wrt_size,
 {
         uint32_t base_addr;
         uint32_t i = 0;
-        uint32_t y = 0;
-        uint32_t fifo_size;
         struct cc_uart_state *uart_state = (struct cc_uart_state *)hndl;
         struct cc_uart_config *uart_config = (struct cc_uart_config *)&(uart_state->uart_config);
         base_addr = (uart_config->module_info).base_addr;
         
         uart_state->wrt_buff = wrt_data;
-        uart_state->wrt_wrds_done= 0;
         uart_state->wrt_byts_done = 0;
 
-        /* waiting for the tx fifo to clear */
-        while(e_true == MAP_UARTBusy(base_addr));
         switch(uart_config->tx_transfer_mode){
         case e_poll_based:
         		uart_state->wrt_done = e_false;
@@ -447,43 +394,32 @@ i32 cc_uart_wr_submit(cc31xx_hndl hndl,uint8_t *wrt_data, uint32_t wrt_size,
                 break;
 
         case e_int_based:
-                i = 0;
-                fifo_size = (uart_config->module_info).fifo_size;
-                
                 uart_state->wrt_done = e_false;
-                y = (fifo_size < wrt_size)?fifo_size:wrt_size;
-                while(i < y){
-                        MAP_UARTCharPutNonBlocking(base_addr,
-                        						   uart_state->wrt_buff[i]);
-                        i++;
-                }
-                if(i >= wrt_size){
-                		uart_state->wrt_done = e_true;
-                		//UARTIntClear(base_addr, 0x800);
-                		//UARTIntEnable(base_addr, 0x800);
-                		/* Invoke the callback */
-						if((uart_config->module_info).int_callback) {
-									(uart_config->module_info).int_callback(
-										uart_config->rtos_hndl, write_complete,
-										(void *)&(uart_state->wrt_done),
-										NULL);
-
-						}
-                        break;
-                }
-                
-                uart_state->wrt_num_wrds = ((wrt_size-i)/uart_state->wrt_wrd_size);
-                uart_state->wrt_num_byts = ((wrt_size-i)%uart_state->wrt_wrd_size);
+                uart_state->wrt_num_byts = wrt_size;
+                /* Clearing unwanted interrupt, if any */
                 MAP_UARTIntClear(base_addr, 0x20);
-                MAP_UARTIntEnable(base_addr, 0x20);
-                break;
+                while(uart_state->wrt_num_byts != 0){
+						if(true == MAP_UARTCharPutNonBlocking(base_addr,
+								uart_state->wrt_buff[uart_state->wrt_byts_done])){
+								uart_state->wrt_num_byts--;
+								uart_state->wrt_byts_done++;
+						}else{
+								break;
+						}
+				}
 
-        case e_dma_based:
-				uart_state->wrt_num_wrds = ((wrt_size)/uart_state->wrt_wrd_size);
-				uart_state->wrt_num_byts = ((wrt_size)%uart_state->wrt_wrd_size);
-				uart_state->wrt_done = e_false;
-                MAP_UARTIntClear(base_addr, 0x20000);
-                MAP_UARTIntEnable(base_addr, 0x20000);
+                if(uart_state->wrt_num_byts == 0){
+						uart_state->wrt_done = e_true;
+						/* Invoke the callback */
+						if((uart_config->module_info).int_callback) {
+								(uart_config->module_info).int_callback(
+									uart_config->rtos_hndl, write_complete,
+									(void *)&(uart_state->wrt_done),
+									NULL);
+						}
+				}else{
+						MAP_UARTIntEnable(base_addr, 0x20);
+				}
                 break;
                 
         default:
@@ -499,10 +435,8 @@ i32 cc_uart_control(cc_hndl hndl, enum cc_uart_ctrl_cmd cmd, void *arg)
 		struct cc_uart_state *uart_state = (struct cc_uart_state *)hndl;
 		struct cc_uart_config *uart_config = (struct cc_uart_config *)&(uart_state->uart_config);
 		uint32_t base_addr = (uart_config->module_info).base_addr;
-        uint32_t flag = HWREG(base_addr + UART_O_FR);
-        if(!((flag & UART_FR_TXFE) && (flag & UART_FR_RXFE))){
-                return -1;
-        }
+        uint32_t flag;
+
         switch(cmd){
         case e_rx_change_mode:
                 uart_config->rx_transfer_mode = *(enum cc_transfer_mode*)arg;
@@ -584,6 +518,10 @@ i32 cc_uart_control(cc_hndl hndl, enum cc_uart_ctrl_cmd cmd, void *arg)
                 break;
 
         case e_context_save:
+        		flag = HWREG(base_addr + UART_O_FR);
+        	    if((!(flag & UART_FR_TXFE))){
+        	                return -1;
+        	    }
         		break;
 
         case e_context_restore:
@@ -591,22 +529,34 @@ i32 cc_uart_control(cc_hndl hndl, enum cc_uart_ctrl_cmd cmd, void *arg)
         	    break;
 
         case e_get_dma_info:
+        		*(struct uart_dma_info*)arg = uart_config->dma_info;
         		break;
 
         case e_start_tx_dma_transfer:
         		if(*(u32*)arg == 1){
+        				uart_state->wrt_done = e_false;
+						MAP_UARTIntClear(base_addr, 0x20000);
+						MAP_UARTIntEnable(base_addr, 0x20000);
         				MAP_UARTDMAEnable(base_addr, UART_DMA_TX);
+
         		}else{
+        				uart_state->wrt_done = e_true;
         				MAP_UARTDMADisable(base_addr, UART_DMA_TX);
+        				MAP_UARTIntDisable(base_addr, 0x20000);
         		}
 
         	    break;
 
         case e_start_rx_dma_transfer:
         		if(*(u32*)arg == 1){
+        				uart_state->rd_done = e_false;
+						MAP_UARTIntClear(base_addr, 0x10000);
+						MAP_UARTIntEnable(base_addr, 0x10000);
         				MAP_UARTDMAEnable(base_addr, UART_DMA_RX);
         		}else{
+        				uart_state->rd_done = e_true;
         				MAP_UARTDMADisable(base_addr, UART_DMA_RX);
+        				MAP_UARTIntDisable(base_addr, 0x10000);
         		}
 
         	    break;

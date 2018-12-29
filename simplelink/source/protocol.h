@@ -1,7 +1,7 @@
 /*
  * protocol.h - CC31xx/CC32xx Host Driver Implementation
  *
- * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/ 
+ * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/ 
  * 
  * 
  *  Redistribution and use in source and binary forms, with or without 
@@ -68,6 +68,7 @@
 
 #define H2N_DUMMY_PATTERN    (_u32)0xFFFFFFFF
 #define N2H_SYNC_PATTERN     (_u32)0xABCDDCBA
+
 #define SYNC_PATTERN_LEN     (_u32)sizeof(_u32)
 #define UART_SET_MODE_MAGIC_CODE    (_u32)0xAA55AA55
 #define SPI_16BITS_BUG(pattern)     (_u32)((_u32)pattern & (_u32)0xFFFF7FFF)
@@ -149,6 +150,7 @@ typedef struct
 #define SL_FLAGS_MASK                              (0xF)
 
 #define SL_OPCODE_DEVICE_INITCOMPLETE                               	0x0008
+#define SL_OPCODE_DEVICE_ABORT			                               	0x000C
 #define SL_OPCODE_DEVICE_STOP_COMMAND                               	0x8473
 #define SL_OPCODE_DEVICE_STOP_RESPONSE                              	0x0473
 #define SL_OPCODE_DEVICE_STOP_ASYNC_RESPONSE                        	0x0073
@@ -156,7 +158,7 @@ typedef struct
 
 #define SL_OPCODE_DEVICE_VERSIONREADCOMMAND	                            0x8470
 #define SL_OPCODE_DEVICE_VERSIONREADRESPONSE	                        0x0470
-#define SL_OPCODE_DEVICE_DEVICEASYNCFATALERROR                      	0x0078
+#define SL_OPCODE_DEVICE_ASYNC_GENERAL_ERROR                        	0x0078
 #define SL_OPCODE_WLAN_WLANCONNECTCOMMAND                           	0x8C80
 #define SL_OPCODE_WLAN_WLANCONNECTRESPONSE                          	0x0C80
 #define SL_OPCODE_WLAN_WLANASYNCCONNECTEDRESPONSE                   	0x0880
@@ -350,9 +352,6 @@ typedef struct
 #define SL_OPCODE_WLAN_SMARTCONFIGOPTSETRESPONSE                    	0x0C8D
 #define SL_OPCODE_WLAN_SMARTCONFIGOPTGET                            	0x8C8E
 #define SL_OPCODE_WLAN_SMARTCONFIGOPTGETRESPONSE                    	0x0C8E
-
-#define SL_OPCODE_FREE_BSD_RECV_BUFFER                                  0xCCCB
-#define SL_OPCODE_FREE_NON_BSD_READ_BUFFER                              0xCCCD
 
 
 /* Rx Filters opcodes */
@@ -1032,6 +1031,7 @@ typedef struct
   _u16 rxKbitsSec;
   _u32 outOfOrderPackets;
   _u32 missedPackets;
+  _i16 token;
 }_CtestAsyncResponse_t;
 
 typedef struct
@@ -1162,8 +1162,15 @@ typedef _BasicResponse_t _FsWriteResponse_t;
 
 
 
-/*  Set Max Async Payload length depending on flavor (Tiny, Small, etc.)  */
-#define SL_ASYNC_MAX_PAYLOAD_LEN        160  /* size must be aligned to 4  */
+/* TODO: Set MAx Async Payload length depending on flavor (Tiny, Small, etc.) */
+
+
+#ifdef SL_TINY_EXT
+#define SL_ASYNC_MAX_PAYLOAD_LEN        120  /* size must be aligned to 4 */
+#else
+#define SL_ASYNC_MAX_PAYLOAD_LEN        160 /* size must be aligned to 4 */
+#endif
+
 #define SL_ASYNC_MAX_MSG_LEN            (_SL_RESP_HDR_SIZE + SL_ASYNC_MAX_PAYLOAD_LEN)
 
 #define RECV_ARGS_SIZE                  (sizeof(_SocketResponse_t))

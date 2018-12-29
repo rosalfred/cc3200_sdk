@@ -85,7 +85,7 @@
 #define APPLICATION_NAME        "mDNS Listen"
 #endif
 
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 #define SERVICE_NAME            "CC3200._uart._tcp.local"
 
 // Application specific status/error codes
@@ -102,7 +102,7 @@ typedef enum{
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
-unsigned long  g_ulStatus = 0;//SimpleLink Status
+volatile unsigned long  g_ulStatus = 0;//SimpleLink Status
 unsigned long  g_ulGatewayIP = 0; //Network Gateway IP address
 unsigned char  g_ucConnectionSSID[SSID_LEN_MAX+1]; //Connection SSID
 unsigned char  g_ucConnectionBSSID[BSSID_LEN_MAX]; //Connection BSSID
@@ -191,8 +191,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
             pEventData = &pWlanEvent->EventData.STAandP2PModeDisconnected;
 
             // If the user has initiated 'Disconnect' request,
-            //'reason_code' is SL_USER_INITIATED_DISCONNECTION
-            if(SL_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
+            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION
+            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
             {
                 UART_PRINT("[WLAN EVENT]Device disconnected from the AP: %s,"
                     "BSSID: %x:%x:%x:%x:%x:%x on application's request \n\r",
@@ -337,6 +337,7 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
     //
 
 }
+
 
 //*****************************************************************************
 // SimpleLink Asynchronous Event Handlers -- End

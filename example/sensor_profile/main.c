@@ -98,7 +98,7 @@
 #include "pinmux.h"
 
 
-#define APPLICATION_VERSION  "1.1.0"
+#define APPLICATION_VERSION  "1.1.1"
 //
 // Values for below macros shall be modified as per access-point(AP) properties
 // SimpleLink device will connect to following AP when application is executed
@@ -139,7 +139,7 @@ enum ap_events{
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
-unsigned char g_ucTrafficEnable = 0;
+volatile unsigned char g_ucTrafficEnable = 0;
 unsigned long long g_ullTrafficDelay = 0;
 unsigned char g_ucIsTrafficDelayCal = 0;
 cc_hndl g_tUartHndl;
@@ -424,6 +424,20 @@ void sl_HttpServerCallback(SlHttpServerEvent_t *pSlHttpServerEvent,
 
 //*****************************************************************************
 //
+//! \brief This function handles General Events
+//!
+//! \param[in]     pDevEvent - Pointer to General Event Info
+//!
+//! \return None
+//!
+//*****************************************************************************
+void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
+{
+
+}
+
+//*****************************************************************************
+//
 //! This function handles socket events indication
 //!
 //! \param[in]      pSock - Pointer to Socket Event Info
@@ -438,6 +452,7 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
     //
 
 }
+
 
 //*****************************************************************************
 //
@@ -510,15 +525,18 @@ int WlanConnect()
     SlSecParams_t secParams;
 
     secParams.Key = (signed char *)SECURITY_KEY;
-    secParams.KeyLen = sizeof(secParams.Key);
+    secParams.KeyLen = strlen((const char *)secParams.Key);
     secParams.Type = SECURITY_TYPE;
 
     //
     // Set up the watchdog interrupt handler.
     //
     WDT_IF_Init(WatchdogIntHandler, MILLISECONDS_TO_TICKS(WD_PERIOD_MS));
-
+    /* Enabling the Sleep clock for the Watch Dog Timer*/
+    MAP_PRCMPeripheralClkEnable(PRCM_WDT, PRCM_SLP_MODE_CLK);
+    
     g_ucFeedWatchdog = 1;
+    g_ucWdogCount = 0;
     while(!(ucQueueMsg & (EVENT_IP_ACQUIRED|CONNECTION_FAILED)))
     {
         UART_PRINT("Trying to connect to AP: ");
@@ -844,6 +862,16 @@ void TimerGPIOTask(void *pvParameters)
     unsigned char *pcSendBuff;
     unsigned char cSyncMsg;
 
+    //
+    // creating the queue for signalling about connection events
+    //
+    iRetVal = osi_MsgQCreate(&g_tConnection, NULL, sizeof( unsigned char ), 3);
+    if (iRetVal < 0)
+    {
+        UART_PRINT("unable to create the msg queue\n\r");
+        LOOP_FOREVER();
+    }
+    
     // filling the buffer
     for (iCounter=0 ; iCounter<BUFF_SIZE ; iCounter++)
     {
@@ -857,50 +885,61 @@ void TimerGPIOTask(void *pvParameters)
         // Displays the Application Banner
         //
         DisplayBanner();
+        
+        //
+        // starting the simplelink
+        //
+        iRetVal = sl_Start(NULL, NULL, NULL);
+        if (iRetVal < 0)
+        {
+            UART_PRINT("Failed to start the device \n\r");
+            LOOP_FOREVER();
+        }
+
+        //
+        // Switch to STA mode if device is not in this mode
+        //
+        SwitchToStaMode(iRetVal);
+
+        //
+        // Set the power management policy of NWP
+        //
+        iRetVal = sl_WlanPolicySet(SL_POLICY_PM, SL_NORMAL_POLICY, NULL, 0);
+        if (iRetVal < 0)
+        {
+            UART_PRINT("unable to configure network power policy\n\r");
+            LOOP_FOREVER();
+        }
     }
     else if(MAP_PRCMSysResetCauseGet() == PRCM_HIB_EXIT)
     {
         UART_PRINT("woken from hib\n\r");
+        //
+        // starting the simplelink
+        //
+        iRetVal = sl_Start(NULL, NULL, NULL);
+        if (iRetVal < 0)
+        {
+            UART_PRINT("Failed to start the device \n\r");
+            LOOP_FOREVER();
+        }
     }
     else if(MAP_PRCMSysResetCauseGet() == PRCM_WDT_RESET)
     {
         UART_PRINT("woken from WDT Reset\n\r");
+        //
+        // starting the simplelink
+        //
+        iRetVal = sl_Start(NULL, NULL, NULL);
+        if (iRetVal < 0)
+        {
+            UART_PRINT("Failed to start the device \n\r");
+            LOOP_FOREVER();
+        }
     }
     else
     {
         UART_PRINT("woken cause unknown\n\r");
-    }
-
-    //
-    // starting the simplelink
-    //
-    iRetVal = sl_Start(NULL, NULL, NULL);
-    if (iRetVal < 0)
-    {
-        UART_PRINT("Failed to start the device \n\r");
-        LOOP_FOREVER();
-    }
-
-    //
-    // Switch to STA mode if device is not in this mode
-    //
-    SwitchToStaMode(iRetVal);
-
-    //
-    // Set the power management policy of NWP
-    //
-    iRetVal = sl_WlanPolicySet(SL_POLICY_PM, SL_NORMAL_POLICY, NULL, 0);
-    if (iRetVal < 0)
-    {
-        UART_PRINT("unable to configure network power policy\n\r");
-        LOOP_FOREVER();
-    }
-
-    iRetVal = osi_MsgQCreate(&g_tConnection, NULL, sizeof( unsigned char ), 3);
-    if (iRetVal < 0)
-    {
-        UART_PRINT("unable to create the msg queue\n\r");
-        LOOP_FOREVER();
     }
     
     //

@@ -206,11 +206,10 @@ static void setup_dma_transfer(struct uart_rtos_driver *rtos_hndl,
                    const i8 *tx_data, i8 *rx_data,
                    i32 size)
 {
-    struct uart_dma_info dma_info = { 0, 0, 0, 0 };
+    	struct uart_dma_info dma_info = { 0, 0, 0, 0 };
         u32 word_len = 8;
-        i32 wr_pend = -1;
-        i32 rd_pend = -1;
-        /* Get the SPI DMA specific info */
+
+        /* Get the UART DMA specific info */
         cc_uart_control(rtos_hndl->hal_handle, e_get_dma_info,
                        &dma_info);
         if(tx_data && rx_data) { /* FULL DUPLEX */
@@ -219,15 +218,12 @@ static void setup_dma_transfer(struct uart_rtos_driver *rtos_hndl,
                               (void *)dma_info.tx_reg_addr,
                               (void *)tx_data,
                               size, word_len, UART_DMA_TX);
-                cc_uart_wr_submit(rtos_hndl->hal_handle, (uint8_t*)tx_data,
-                              	   size, (void*)&wr_pend);
+
                 /* Setup the dma for the read transfer */
                 setup_uart_dma(rtos_hndl->rx_dma_hndl,
                               rx_data,
                               (void *)dma_info.rx_reg_addr,
                               size, word_len, UART_DMA_RX);
-                cc_uart_rd_submit(rtos_hndl->hal_handle, (uint8_t*)rx_data,
-                                  size, (void*)&rd_pend);
 
         } else if (tx_data) { /* HALF DUPLEX WRITE */
                 /* Setup the dma for the write transfer */
@@ -235,8 +231,6 @@ static void setup_dma_transfer(struct uart_rtos_driver *rtos_hndl,
                               (void *)dma_info.tx_reg_addr,
                               (void *)tx_data,
                               size, word_len, UART_DMA_TX);
-                cc_uart_wr_submit(rtos_hndl->hal_handle, (uint8_t*)tx_data,
-                				   size, (void*)&wr_pend);
 
         } else { /* HALF DUPLEX READ */
 
@@ -245,13 +239,11 @@ static void setup_dma_transfer(struct uart_rtos_driver *rtos_hndl,
                               rx_data,
                               (void *)dma_info.rx_reg_addr,
                               size, word_len, UART_DMA_RX);
-                cc_uart_rd_submit(rtos_hndl->hal_handle, (uint8_t*)rx_data,
-                				  size, (void*)&rd_pend);
         }
 }
 
 /*
-   Trigger the SPI DMA transfer. The parameters passed is used to identify the
+   Trigger the UART DMA transfer. The parameters passed is used to identify the
    mode of operation.
         tx_data: !NULL, rx_data: NULL --> Half duplex write
         tx_data: NULL, rx_data: !NULL --> Half duplex read
@@ -332,6 +324,8 @@ exit:
         return retval;
 }
 
+i8 is_uartdrv_reset = 0;
+
 /*
    This function should be called from centralized & RTOS specific
     initialization sequence.
@@ -351,9 +345,14 @@ i32 uart_driver_load(struct soc_module *uart_module)
                 (struct cc_uart_config *)uart_module->hw_detail;
         cc_hndl hndl;
         struct cc_dma_chan_cfg chan_config;
-
-        /* Reset the UART driver structure once in the begining */
-        reset_uart_rtosdrv();
+        
+        if(is_uartdrv_reset == 0)
+        {
+          /* Reset the UART driver structure once in the begining */
+          reset_uart_rtosdrv();
+          is_uartdrv_reset = 1;
+        }
+          
 
         /* Initialize the UART RTOS driver */
         uart_rtos_drv_hndl = check_uart_rtosdrv_inuse(uart_config->module_id);
@@ -361,7 +360,7 @@ i32 uart_driver_load(struct soc_module *uart_module)
                 /* Acquire a new rtos driver structure from the list */
                 uart_rtos_drv_hndl = get_available_uart_rtosdrv();
                 if(NULL == uart_rtos_drv_hndl) {
-                        /* Something wrong - should have failed at spi_init */
+                        /* Something wrong - should have failed at uart_init */
                         goto exit1; /* Error */
                 }
         } else {
@@ -369,17 +368,15 @@ i32 uart_driver_load(struct soc_module *uart_module)
                 goto exit1;
         }
 
-        /* Assign call back routines into spi_config structure for HAL  */
+        /* Assign call back routines into uart_config structure for HAL  */
         (uart_config->module_info).int_callback = uart_callback_from_hal;
         uart_config->rtos_hndl = (void *)uart_rtos_drv_hndl;
 
-        /* Initialize the SPI HAL */
+        /* Initialize the UART HAL */
         hndl = cc_uart_init(uart_config);
         if(NULL == hndl) {
                 goto exit2; /* Error */
         }
-
-        /* Derive other information from spi_haldrv.hw_module.priv_info */
 
         /* Initialize the module driver structure */
         uart_rtos_drv_hndl->device_id = uart_config->module_id;
@@ -410,7 +407,7 @@ i32 uart_driver_load(struct soc_module *uart_module)
 
         uart_rtos_drv_hndl->tx_dma_hndl =
                 cc_dma_alloc(uart_config->dma_info.tx_dma_ch,
-                		     (DMA_USER_UART0_RX +
+                		     (DMA_USER_UART0_TX +
                 		      2*(uart_config->module_id - PRCM_UARTA0)));
         cc_dma_chan_config(uart_rtos_drv_hndl->tx_dma_hndl, &chan_config);
 
@@ -514,9 +511,9 @@ i32 uart_write(cc_hndl uart_drv_hndl, i8 *wr_data, i32 size)
         RTOS_MUTEX_ACQUIRE(&rtos_drv->lock_obj);
 
         /* Check the mode of transfer. If DMA, handle it here else invoke HAL */
-        if(size > DMA_BUFF_SIZE_MIN) {
+        if(e_dma_based == rtos_drv->rx_oper_mode) {
 
-                /* Initiate the SPI transfer over DMA */
+                /* Initiate the UART transfer over DMA */
                 trigger_uart_dma_transfer(rtos_drv, wr_data, NULL, size);
 
                 RTOS_SEM_WAIT(&rtos_drv->sync_obj); /* RTOS function blocking */
@@ -554,8 +551,8 @@ i32 uart_read(cc_hndl uart_drv_hndl, i8 *rd_data, i32 size)
         RTOS_MUTEX_ACQUIRE(&rtos_drv->lock_obj);
 
         /* Check the mode of transfer. If DMA, handle it here else invoke HAL */
-        if(size > DMA_BUFF_SIZE_MIN) {
-               /* Initiate the SPI transfer over DMA */
+        if(e_dma_based == rtos_drv->rx_oper_mode) {
+               /* Initiate the UART transfer over DMA */
                 trigger_uart_dma_transfer(rtos_drv, NULL, rd_data, size);
 
                 RTOS_SEM_WAIT(&rtos_drv->sync_obj);

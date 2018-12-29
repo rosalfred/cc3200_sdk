@@ -111,10 +111,10 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     IntDefaultHandler,                      // The PendSV handler
     IntDefaultHandler,                      // The SysTick handler
-    IntDefaultHandler,                      // GPIO Port A
-    IntDefaultHandler,                      // GPIO Port B
-    IntDefaultHandler,                      // GPIO Port C
-    IntDefaultHandler,                      // GPIO Port D
+    IntDefaultHandler,                      // GPIO Port A0
+    IntDefaultHandler,                      // GPIO Port A1
+    IntDefaultHandler,                      // GPIO Port A2
+    IntDefaultHandler,                      // GPIO Port A3
     0,                                      // Reserved
     IntDefaultHandler,                      // UART0 Rx and Tx
     IntDefaultHandler,                      // UART1 Rx and Tx

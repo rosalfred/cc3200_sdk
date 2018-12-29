@@ -708,6 +708,7 @@ OsiReturnVal_e osi_MsgQWrite(OsiMsgQ_t *pMsgQ, void *pMsg, OsiTime_t Timeout)
 	}    
 	
     ret_status = Mailbox_post((Mailbox_Handle)*pMsgQ, pMsg, Timeout);
+    Task_yield();
     if (TRUE != ret_status)
 	{
         return OSI_OPERATION_FAILED;

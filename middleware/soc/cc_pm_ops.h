@@ -44,11 +44,8 @@
  * Power Management Platform operations APIs
  ******************************************************************************/
 
-#define LPDS_UP_TIME            425    /* 13 msec */
-#define LPDS_DOWN_TIME          98     /* 3 msec */
-#define USER_OFFSET             131    /* 4 smec */
-#define WAKEUP_TIME_LPDS        (LPDS_UP_TIME+LPDS_DOWN_TIME+USER_OFFSET)
-#define WAKEUP_TIME_HIB         16384           /* 500 ms */
+#define WAKEUP_TIME_LPDS        230             /* 7 ms */
+#define WAKEUP_TIME_HIB         3277            /* 100 ms */
 #define LPDS_WDOG_TIME			32768			/* 1 sec */
 #define RAM_RETAIN_NONE         0
 #define RAM_RETAIN_64KB         (PRCM_SRAM_COL_1)

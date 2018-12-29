@@ -87,7 +87,7 @@
 
 
 #define APPLICATION_NAME        "HTTP Server"
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 #define AP_SSID_LEN_MAX         (33)
 #define ROLE_INVALID            (-5)
 
@@ -117,7 +117,7 @@ typedef enum{
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
-unsigned long  g_ulStatus = 0;//SimpleLink Status
+volatile unsigned long  g_ulStatus = 0;//SimpleLink Status
 unsigned long  g_ulPingPacketsRecv = 0; //Number of Ping Packets received 
 unsigned long  g_ulGatewayIP = 0; //Network Gateway IP address
 unsigned char  g_ucConnectionSSID[SSID_LEN_MAX+1]; //Connection SSID
@@ -146,7 +146,7 @@ volatile unsigned short g_usMCNetworkUstate = 0;
 
 int g_uiSimplelinkRole = ROLE_INVALID;
 unsigned int g_uiDeviceModeConfig = ROLE_STA; //default is STA mode
-unsigned char g_ucConnectTimeout =0;
+volatile unsigned char g_ucConnectTimeout =0;
 
 
 
@@ -290,8 +290,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
             pEventData = &pWlanEvent->EventData.STAandP2PModeDisconnected;
 
             // If the user has initiated 'Disconnect' request, 
-            //'reason_code' is SL_USER_INITIATED_DISCONNECTION 
-            if(SL_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
+            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION 
+            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
             {
                 UART_PRINT("[WLAN EVENT]Device disconnected from the AP: %s,"
                 "BSSID: %x:%x:%x:%x:%x:%x on application's request \n\r",
@@ -515,6 +515,31 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
 
 //*****************************************************************************
 //
+//! \brief This function handles General Events
+//!
+//! \param[in]     pDevEvent - Pointer to General Event Info
+//!
+//! \return None
+//!
+//*****************************************************************************
+void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
+{
+    if(!pDevEvent)
+    {
+        return;
+    }
+
+    //
+    // Most of the general errors are not FATAL are are to be handled
+    // appropriately by the application
+    //
+    UART_PRINT("[GENERAL EVENT] - ID=[%d] Sender=[%d]\n\n",
+               pDevEvent->EventData.deviceEvent.status,
+               pDevEvent->EventData.deviceEvent.sender);
+}
+
+//*****************************************************************************
+//
 //! This function handles socket events indication
 //!
 //! \param[in]      pSock - Pointer to Socket Event Info
@@ -529,7 +554,6 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
     //
  
 }
-
 
 //*****************************************************************************
 //
@@ -652,6 +676,7 @@ void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pSlHttpServerEvent,
           break;
     }
 }
+
 
 //*****************************************************************************
 //

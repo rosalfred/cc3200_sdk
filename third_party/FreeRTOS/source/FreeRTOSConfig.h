@@ -140,4 +140,11 @@ version. */
 	#define configASSERT( x ) if( x == 0 ) vAssertCalled( __FILE__, __LINE__ );
 #endif
 
+#if defined(ccs)
+   void vAssertCalled(const char *pcFile, unsigned long ulLine );
+    #define configASSERT(expr) if ( (expr) == 0)   {                                                    \
+                                                        vAssertCalled( __FILE__ , __LINE__ ); \
+                                                    }
+#endif
+
 #endif /* FREERTOS_CONFIG_H */

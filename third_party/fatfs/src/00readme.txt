@@ -1,123 +1,35 @@
-FatFs/Tiny-FatFs Module Source Files R0.04b   (C)ChaN, 2007
+FatFs Module Source Files R0.10c                      (C)ChaN, 2014
 
 
 FILES
 
+  ffconf.h   Configuration file for FatFs module.
   ff.h       Common include file for FatFs and application module.
   ff.c       FatFs module.
-  tff.h      Common include file for Tiny-FatFs and application module.
-  tff.c      Tiny-FatFs module.
-  diskio.h   Common include file for (Tiny-)FatFs and disk I/O module.
-  integer.h  Alternative type definitions for integer variables.
+  diskio.h   Common include file for FatFs and disk I/O module.
+  diskio.c   An example of glue function to attach existing disk I/O module to FatFs.
+  integer.h  Integer type definitions for FatFs.
+  option     Optional external functions.
 
-  Low level disk I/O module is not included in this archive because the
-  FatFs/Tiny-FatFs module is only a generic file system layer and not depend
-  on any specific storage device. You have to provide a low level disk I/O
-  module that written to control your storage device.
-
-
-
-CONFIGURATION OPTIONS
-
-  There are several configuration options for various envilonment and
-  requirement. The configuration options are defined in header files, ff.h
-  and tff.h.
-
-  _MCU_ENDIAN
-
-  This is the most impotant option that depends on the processor architecture.
-  When the target device corresponds to either or both of following terms, the
-  _MCU_ENDIAN must be set to 2 to force FatFs to access FAT structure in
-  byte-by-byte.
-
-  - Muti-byte integers (short, long) are stored in Big-Endian.
-  - Address miss-aligned memory access results in an incorrect behavior.
-
-  If not the case, this can be set to 1 for good code efficiency. The initial
-  value is 0. (must be set to 1 or 2 properly)
-
-
-  _FS_READONLY
-
-  When application program does not require any write function, _FS_READONLY
-  can be set to 1 to eliminate writing code to reduce the module size. This
-  setting should be reflected to configurations of low level disk I/O module
-  if available. The initial value is 0. (Read and Write)
-
-
-  _FS_MINIMIZE
-
-  When application program requires only file read/write function, _FS_MINIMIZE
-  can be changed to eliminate some functions to reduce the module size. The
-  initial value is 0. (full function)
-
-
-  _DRIVES
-
-  Number of drives to be used. This option is not available on Tiny-FatFs.
-  The initial value is 2.
-
-  _FAT32
-
-  When _FAT32 is set to 1, the FAT32 support is added with an additional
-  code size. This option is for only Tiny-FatFs. FatFs always supports all
-  FAT sub-types. The initial value is 0. (no FAT32 support)
-
-
-  _USE_FSINFO
-
-  When _USE_FSINFO is set to 1, FSInfo is used for FAT32 volume.
-
-
-  _USE_SJIS
-
-  When _USE_SJIS is set to 1, Shift_JIS code set can be used as a file name,
-  otherwire second byte of double-byte characters will be collapted.
-  The initial value is 1.
-
-
-  _USE_NTFLAG
-
-  When _USE_NTFLAG is set to 1, upper/lower case of the file/dir name is
-  preserved. Note that the files are always accessed in case insensitive.
-
-
-  _USE_MKFS
-
-  When _USE_MKFS is set to 1 and _FS_READONLY is set to 0, f_mkfs function
-  is enabled. This is for only FatFs module and not supported on Tiny-FatFs.
-  The initial value is 0. (f_mkfs is not available)
-
-
-  Following table shows which function is removed by configuratin options.
-
-                _FS_MINIMIZE   _FS_READONLY  _USE_MKFS 
-                (1)  (2)  (3)       (1)         (0)    
-   f_mount                                             
-   f_open                                              
-   f_close                                             
-   f_read                                              
-   f_write                           x                 
-   f_sync                            x                 
-   f_lseek                 x                           
-   f_opendir          x    x                           
-   f_readdir          x    x                           
-   f_stat        x    x    x                           
-   f_getfree     x    x    x         x                 
-   f_unlink      x    x    x         x                 
-   f_mkdir       x    x    x         x                 
-   f_chmod       x    x    x         x                 
-   f_rename      x    x    x         x                 
-   f_mkfs        x    x    x         x          x      
+  Low level disk I/O module is not included in this archive because the FatFs
+  module is only a generic file system layer and not depend on any specific
+  storage device. You have to provide a low level disk I/O module that written
+  to control your storage device.
 
 
 
 AGREEMENTS
 
-  The FatFs/Tiny-FatFs module is a free software and there is no warranty.
-  The FatFs/Tiny-FatFs module is opened for education, reserch and development.
-  You can use and/or modify it for personal, non-profit or profit use without
-  any restriction under your responsibility.
+ FatFs module is an open source software to implement FAT file system to
+ small embedded systems. This is a free software and is opened for education,
+ research and commercial developments under license policy of following trems.
+
+  Copyright (C) 2014, ChaN, all right reserved.
+
+ * The FatFs module is a free software and there is NO WARRANTY.
+ * No restriction on use. You can use, modify and redistribute it for
+   personal, non-profit or commercial product UNDER YOUR RESPONSIBILITY.
+ * Redistributions of source code must retain the above copyright notice.
 
 
 
@@ -133,26 +45,119 @@ REVISION HISTORY
 
   Jun 10, 2006  R0.02a Added a configuration option _FS_MINIMUM.
 
-  Sep 22, 2006  R0.03  Added f_rename().
+  Sep 22, 2006  R0.03  Added f_rename.
                        Changed option _FS_MINIMUM to _FS_MINIMIZE.
 
   Dec 11, 2006  R0.03a Improved cluster scan algolithm to write files fast.
-                       Fixed f_mkdir() creates incorrect directory on FAT32.
+                       Fixed f_mkdir creates incorrect directory on FAT32.
 
   Feb 04, 2007  R0.04  Supported multiple drive system. (FatFs)
                        Changed some APIs for multiple drive system.
-                       Added f_mkfs(). (FatFs)
+                       Added f_mkfs. (FatFs)
                        Added _USE_FAT32 option. (Tiny-FatFs)
 
   Apr 01, 2007  R0.04a Supported multiple partitions on a plysical drive. (FatFs)
-                       Fixed an endian sensitive code in f_mkfs(). (FatFs)
-                       Added a capability of extending the file size to f_lseek().
+                       Fixed an endian sensitive code in f_mkfs. (FatFs)
+                       Added a capability of extending the file size to f_lseek.
                        Added minimization level 3.
                        Fixed a problem that can collapse a sector when recreate an
                        existing file in any sub-directory at non FAT32 cfg. (Tiny-FatFs)
 
-  May 05, 2007  R0.04b  Added _USE_NTFLAG option.
-                        Added FSInfo support.
-                        Fixed some problems corresponds to FAT32. (Tiny-FatFs)
-                        Fixed DBCS name can result FR_INVALID_NAME.
-                        Fixed short seek (<= csize) collapses the file object.
+  May 05, 2007  R0.04b Added _USE_NTFLAG option.
+                       Added FSInfo support.
+                       Fixed some problems corresponds to FAT32. (Tiny-FatFs)
+                       Fixed DBCS name can result FR_INVALID_NAME.
+                       Fixed short seek (0 < ofs <= csize) collapses the file object.
+
+  Aug 25, 2007  R0.05  Changed arguments of f_read, f_write.
+                       Changed arguments of f_mkfs. (FatFs)
+                       Fixed f_mkfs on FAT32 creates incorrect FSInfo. (FatFs)
+                       Fixed f_mkdir on FAT32 creates incorrect directory. (FatFs)
+
+  Feb 03, 2008  R0.05a Added f_truncate().
+                       Added f_utime().
+                       Fixed off by one error at FAT sub-type determination.
+                       Fixed btr in f_read() can be mistruncated.
+                       Fixed cached sector is not flushed when create and close without write.
+
+  Apr 01, 2008  R0.06  Added f_forward(). (Tiny-FatFs)
+                       Added string functions: fputc(), fputs(), fprintf() and fgets().
+                       Improved performance of f_lseek() on move to the same or following cluster.
+
+  Apr 01, 2009, R0.07  Merged Tiny-FatFs as a buffer configuration option.
+                       Added long file name support.
+                       Added multiple code page support.
+                       Added re-entrancy for multitask operation.
+                       Added auto cluster size selection to f_mkfs().
+                       Added rewind option to f_readdir().
+                       Changed result code of critical errors.
+                       Renamed string functions to avoid name collision.
+
+  Apr 14, 2009, R0.07a Separated out OS dependent code on reentrant cfg.
+                       Added multiple sector size support.
+
+  Jun 21, 2009, R0.07c Fixed f_unlink() may return FR_OK on error.
+                       Fixed wrong cache control in f_lseek().
+                       Added relative path feature.
+                       Added f_chdir().
+                       Added f_chdrive().
+                       Added proper case conversion for extended characters.
+
+  Nov 03, 2009 R0.07e  Separated out configuration options from ff.h to ffconf.h.
+                       Added a configuration option, _LFN_UNICODE.
+                       Fixed f_unlink() fails to remove a sub-dir on _FS_RPATH.
+                       Fixed name matching error on the 13 char boundary.
+                       Changed f_readdir() to return the SFN with always upper case on non-LFN cfg.
+
+  May 15, 2010, R0.08  Added a memory configuration option. (_USE_LFN)
+                       Added file lock feature. (_FS_SHARE)
+                       Added fast seek feature. (_USE_FASTSEEK)
+                       Changed some types on the API, XCHAR->TCHAR.
+                       Changed fname member in the FILINFO structure on Unicode cfg.
+                       String functions support UTF-8 encoding files on Unicode cfg.
+
+  Aug 16,'10 R0.08a    Added f_getcwd(). (_FS_RPATH = 2)
+                       Added sector erase feature. (_USE_ERASE)
+                       Moved file lock semaphore table from fs object to the bss.
+                       Fixed a wrong directory entry is created on non-LFN cfg when the given name contains ';'.
+                       Fixed f_mkfs() creates wrong FAT32 volume.
+
+  Jan 15,'11 R0.08b    Fast seek feature is also applied to f_read() and f_write().
+                       f_lseek() reports required table size on creating CLMP.
+                       Extended format syntax of f_printf function.
+                       Ignores duplicated directory separators in given path names.
+
+  Sep 06,'11 R0.09     f_mkfs() supports multiple partition to finish the multiple partition feature.
+                       Added f_fdisk(). (_MULTI_PARTITION = 2)
+
+  Aug 27,'12 R0.09a    Fixed assertion failure due to OS/2 EA on FAT12/16.
+                       Changed f_open() and f_opendir() reject null object pointer to avoid crash.
+                       Changed option name _FS_SHARE to _FS_LOCK.
+
+  Jan 23,'13 R0.09b    Added f_getlabel() and f_setlabel(). (_USE_LABEL)
+
+  Oct 02,'13 R0.10     Added selection of character encoding on the file. (_STRF_ENCODE)
+                       Added f_closedir().
+                       Added forced full FAT scan for f_getfree(). (_FS_NOFSINFO)
+                       Added forced mount feature with changes of f_mount().
+                       Improved behavior of volume auto detection.
+                       Improved write throughput of f_puts() and f_printf().
+                       Changed argument of f_chdrive(), f_mkfs(), disk_read() and disk_write().
+                       Fixed f_write() can be truncated when the file size is close to 4GB.
+                       Fixed f_open(), f_mkdir() and f_setlabel() can return incorrect error code.
+
+  Jan 15,'14 R0.10a    Added arbitrary strings as drive number in the path name. (_STR_VOLUME_ID)
+                       Added a configuration option of minimum sector size. (_MIN_SS)
+                       2nd argument of f_rename() can have a drive number and it will be ignored.
+                       Fixed f_mount() with forced mount fails when drive number is >= 1.
+                       Fixed f_close() invalidates the file object without volume lock.
+                       Fixed f_closedir() returns but the volume lock is left acquired.
+                       Fixed creation of an entry with LFN fails on too many SFN collisions.
+
+  Mar 19,'14 R0.10b    Fixed a hard error in the disk I/O layer can collapse the directory entry.
+                       Fixed LFN entry is not deleted on delete/rename an object with lossy converted SFN.
+
+  Nov 09,'14 R0.10c    Added a configuration option for the platforms without RTC. (_FS_NORTC)
+                       Fixed volume label created by Mac OS X cannot be retrieved with f_getlabel().
+                       Fixed a potential problem of FAT access that can appear on disk error.
+                       Fixed null pointer dereference on attempting to delete the root direcotry.

@@ -81,7 +81,7 @@ unsigned long  g_ulStaIp = 0;    /* Station IP address */
 unsigned long  g_ulGatewayIP = 0; /* Network Gateway IP address */
 unsigned char  g_ucConnectionSSID[SSID_LEN_MAX+1]; /* Connection SSID */
 unsigned char  g_ucConnectionBSSID[BSSID_LEN_MAX]; /* Connection BSSID */
-unsigned short g_usConnectIndex; /* Connection time delay index */
+volatile unsigned short g_usConnectIndex; /* Connection time delay index */
 const char     pcDigits[] = "0123456789"; /* variable used by itoa function */
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- End
@@ -229,8 +229,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent)
             pEventData = &pSlWlanEvent->EventData.STAandP2PModeDisconnected;
 
             // If the user has initiated 'Disconnect' request, 
-            //'reason_code' is SL_USER_INITIATED_DISCONNECTION 
-            if(SL_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
+            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION 
+            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
             {
                 UART_PRINT("[WLAN EVENT]Device disconnected from the AP: %s, "
                            "BSSID: %x:%x:%x:%x:%x:%x on application's request "
@@ -501,23 +501,48 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
     switch( pSock->Event )
     {
         case SL_SOCKET_TX_FAILED_EVENT:
-            switch( pSock->EventData.status )
+            switch( pSock->socketAsyncEvent.SockTxFailData.status)
             {
                 case SL_ECLOSE: 
-                    /*UART_PRINT("[SOCK ERROR] - close socket (%d) operation "
+                    UART_PRINT("[SOCK ERROR] - close socket (%d) operation "
                                 "failed to transmit all queued packets\n\n", 
-                                    pSock->EventData.sd);*/
+                                    pSock->socketAsyncEvent.SockTxFailData.sd);
                     break;
                 default: 
-                    /*UART_PRINT("[SOCK ERROR] - TX FAILED  :  socket %d , reason "
+                    UART_PRINT("[SOCK ERROR] - TX FAILED  :  socket %d , reason "
                                 "(%d) \n\n",
-                                pSock->EventData.sd, pSock->EventData.status); */
+                                pSock->socketAsyncEvent.SockTxFailData.sd, pSock->socketAsyncEvent.SockTxFailData.status);
                   break;
             }
             break;
 
+        case SL_SOCKET_ASYNC_EVENT:
+
+        	 switch(pSock->socketAsyncEvent.SockAsyncData.type)
+        	 {
+        	 case SSL_ACCEPT:/*accept failed due to ssl issue ( tcp pass)*/
+        		 UART_PRINT("[SOCK ERROR] - close socket (%d) operation"
+        				 	 "accept failed due to ssl issue\n\r",
+        				 	 pSock->socketAsyncEvent.SockAsyncData.sd);
+                 break;
+        	 case RX_FRAGMENTATION_TOO_BIG:
+        		 UART_PRINT("[SOCK ERROR] -close scoket (%d) operation"
+							 "connection less mode, rx packet fragmentation\n\r"
+        				 	 "> 16K, packet is being released",
+							 pSock->socketAsyncEvent.SockAsyncData.sd);
+                 break;
+        	 case OTHER_SIDE_CLOSE_SSL_DATA_NOT_ENCRYPTED:
+        		 UART_PRINT("[SOCK ERROR] -close socket (%d) operation"
+        				 	 "remote side down from secure to unsecure\n\r",
+        		 			pSock->socketAsyncEvent.SockAsyncData.sd);
+                 break;
+        	 default:
+        		 UART_PRINT("unknown sock async event: %d\n\r",
+        				 	 pSock->socketAsyncEvent.SockAsyncData.type);
+        	 }
+        	break;
         default:
-           /*UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);*/
+        	UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
           break;
     }
 }
@@ -538,7 +563,6 @@ void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pSlHttpServerEvent,
 {
 
 }
-
 
 //*****************************************************************************
 // SimpleLink Asynchronous Event Handlers -- End
@@ -604,7 +628,9 @@ long ConfigureSimpleLinkToDefaultState()
             while(!IS_IP_ACQUIRED(g_ulStatus))
             {
 #ifndef SL_PLATFORM_MULTI_THREADED
-                _SlNonOsMainLoopTask(); 
+                _SlNonOsMainLoopTask();
+#else
+                osi_Sleep(1);
 #endif
             }
         }
@@ -666,6 +692,8 @@ long ConfigureSimpleLinkToDefaultState()
         {
 #ifndef SL_PLATFORM_MULTI_THREADED
               _SlNonOsMainLoopTask(); 
+#else
+              osi_Sleep(1);
 #endif
         }
     }
@@ -784,6 +812,8 @@ Network_IF_InitDriver(unsigned int uiMode)
             {
 #ifndef SL_PLATFORM_MULTI_THREADED
               _SlNonOsMainLoopTask();
+#else
+              osi_Sleep(1);
 #endif
             }
         }
@@ -900,6 +930,8 @@ Network_IF_ConnectAP(char *pcSsid, SlSecParams_t SecurityParams)
     {
 #ifndef SL_PLATFORM_MULTI_THREADED
         _SlNonOsMainLoopTask();
+#else
+              osi_Sleep(1);
 #endif
         MAP_UtilsDelay(8000000);
         if(IS_CONNECTED(g_ulStatus) && IS_IP_ACQUIRED(g_ulStatus))
@@ -981,6 +1013,8 @@ Network_IF_ConnectAP(char *pcSsid, SlSecParams_t SecurityParams)
         {
 #ifndef SL_PLATFORM_MULTI_THREADED
             _SlNonOsMainLoopTask();
+#else
+              osi_Sleep(1);
 #endif
             MAP_UtilsDelay(8000000);
             if(g_usConnectIndex >= usConnTimeout)
@@ -1036,6 +1070,8 @@ Network_IF_DisconnectFromAP()
             {
     #ifndef SL_PLATFORM_MULTI_THREADED
                   _SlNonOsMainLoopTask();
+    #else
+                  osi_Sleep(1);
     #endif
             }
             return lRetVal;

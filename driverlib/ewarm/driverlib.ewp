@@ -29,7 +29,7 @@
         </option>
         <option>
           <name>Variant</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
@@ -60,7 +60,7 @@
         </option>
         <option>
           <name>FPU</name>
-          <version>2</version>
+          <version>3</version>
           <state>0</state>
         </option>
         <option>
@@ -87,7 +87,7 @@
         </option>
         <option>
           <name>OGLastSavedByProductVersion</name>
-          <state>7.20.1.7306</state>
+          <state>7.30.4.8186</state>
         </option>
         <option>
           <name>GeneralEnableMisra</name>
@@ -137,12 +137,12 @@
         </option>
         <option>
           <name>GFPUCoreSlave</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
           <name>GBECoreSlave</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
@@ -245,11 +245,11 @@
         </option>
         <option>
           <name>IExtraOptionsCheck</name>
-          <state>0</state>
+          <state>1</state>
         </option>
         <option>
           <name>IExtraOptions</name>
-          <state></state>
+          <state>--diag_suppress Pa050</state>
         </option>
         <option>
           <name>CCLangConformance</name>
@@ -614,6 +614,7 @@
       <data>
         <extensions></extensions>
         <cmdline></cmdline>
+        <hasPrio>0</hasPrio>
       </data>
     </settings>
     <settings>
@@ -936,7 +937,7 @@
         </option>
         <option>
           <name>IarchiveOutput</name>
-          <state>D:\CC32xx\SDK_0.5.2\driverlib\ewarm\Release\Exe\driverlib.a</state>
+          <state>D:\git\a0132167_SDK_1p1\source-1p1-rahul\driverlib\ewarm\Release\Exe\driverlib.a</state>
         </option>
       </data>
     </settings>
@@ -947,73 +948,73 @@
     </settings>
   </configuration>
   <file>
-    <name>$PROJ_DIR$/../adc.c</name>
+    <name>$PROJ_DIR$\..\adc.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../aes.c</name>
+    <name>$PROJ_DIR$\..\aes.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../camera.c</name>
+    <name>$PROJ_DIR$\..\camera.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../cpu.c</name>
+    <name>$PROJ_DIR$\..\cpu.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../crc.c</name>
+    <name>$PROJ_DIR$\..\crc.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../des.c</name>
+    <name>$PROJ_DIR$\..\des.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../flash.c</name>
+    <name>$PROJ_DIR$\..\flash.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../gpio.c</name>
+    <name>$PROJ_DIR$\..\gpio.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../hwspinlock.c</name>
+    <name>$PROJ_DIR$\..\hwspinlock.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../i2c.c</name>
+    <name>$PROJ_DIR$\..\i2c.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../i2s.c</name>
+    <name>$PROJ_DIR$\..\i2s.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../interrupt.c</name>
+    <name>$PROJ_DIR$\..\interrupt.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../pin.c</name>
+    <name>$PROJ_DIR$\..\pin.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../prcm.c</name>
+    <name>$PROJ_DIR$\..\prcm.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../sdhost.c</name>
+    <name>$PROJ_DIR$\..\sdhost.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../shamd5.c</name>
+    <name>$PROJ_DIR$\..\shamd5.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../spi.c</name>
+    <name>$PROJ_DIR$\..\spi.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../systick.c</name>
+    <name>$PROJ_DIR$\..\systick.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../timer.c</name>
+    <name>$PROJ_DIR$\..\timer.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../uart.c</name>
+    <name>$PROJ_DIR$\..\uart.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../udma.c</name>
+    <name>$PROJ_DIR$\..\udma.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../utils.c</name>
+    <name>$PROJ_DIR$\..\utils.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../wdt.c</name>
+    <name>$PROJ_DIR$\..\wdt.c</name>
   </file>
 </project>
 

@@ -82,4 +82,20 @@
 #undef ROM_PRCMPeripheralReset
 #undef ROM_PRCMPeripheralStatusGet
 #undef ROM_SPIConfigSetExpClk
-
+#undef ROM_AESDataProcess
+#undef ROM_DESDataProcess
+#undef ROM_I2SEnable
+#undef ROM_I2SConfigSetExpClk
+#undef ROM_PinConfigSet
+#undef ROM_PRCMLPDSEnter
+#undef ROM_PRCMCC3200MCUInit
+#undef ROM_SDHostIntStatus
+#undef ROM_SDHostBlockCountSet
+#undef ROM_UARTModemControlSet
+#undef ROM_UARTModemControlClear
+#undef ROM_CameraXClkSet
+#undef ROM_PRCMMCUReset
+#undef ROM_SPIDmaDisable
+#undef ROM_PRCMSRAMRetentionEnable
+#undef ROM_PRCMSRAMRetentionDisable
+#undef ROM_PRCMDeepSleepEnter

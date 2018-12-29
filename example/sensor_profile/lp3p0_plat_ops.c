@@ -193,6 +193,9 @@ void lp3p0_restore_soc_data(void)
 {       
         /* Invoking the default CC3xxx service impl. */
         cc_restore_soc_data();
+		
+		PRCMCC3200MCUInit();
+		
         //
         // Configure the pinmux settings for the peripherals exercised
         //
@@ -202,6 +205,9 @@ void lp3p0_restore_soc_data(void)
 #ifdef DEBUG_GPIO
         cc_gpio_write(tGPIODbgHndl, GPIO_09, 1);
 #endif
+		/* Initialize timer services */
+        MAP_PRCMPeripheralClkEnable(PRCM_TIMERA0, PRCM_RUN_MODE_CLK|
+                                                    PRCM_SLP_MODE_CLK);
         /* ungates the clk for the shared SPI*/
         MAP_PRCMPeripheralClkEnable(PRCM_SSPI, PRCM_RUN_MODE_CLK|
                                     PRCM_SLP_MODE_CLK);

@@ -81,7 +81,7 @@
 //*****************************************************************************
 //                      MACRO DEFINITIONS
 //*****************************************************************************
-#define APPLICATION_VERSION     "1.1.0"
+#define APPLICATION_VERSION     "1.1.1"
 #define APP_NAME                "I2C Demo"
 #define UART_PRINT              Report
 #define FOREVER                 1

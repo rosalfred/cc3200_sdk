@@ -51,7 +51,6 @@ int OpenTCPServerSocket(unsigned int uiPortNum)
   {
      return -1;
   }
-#if 1
   //non blocking socket - Enable nonblocking mode
   iRetVal = sl_SetSockOpt(iSockDesc,SOL_SOCKET,SL_SO_NONBLOCKING, &enableOption,sizeof(enableOption));
   if(iRetVal < 0)
@@ -59,7 +58,7 @@ int OpenTCPServerSocket(unsigned int uiPortNum)
     CloseTCPServerSocket(iSockDesc);
     return -1;
   }
-#endif
+
   if(443 == uiPortNum)
   {
 		iRetVal = sl_SetSockOpt(iSockDesc, SL_SOL_SOCKET, SL_SO_SECURE_FILES_PRIVATE_KEY_FILE_NAME,SL_SSL_SRV_KEY, strlen(SL_SSL_SRV_KEY));
@@ -161,14 +160,14 @@ int CreateTCPClientSocket(int iSockDesc)
   if(sock >= 0)
   {
     enableOption.NonblockingEnabled = 0;
-#if 1
+
     //Blocking socket - Enable blocking mode
     if(sl_SetSockOpt(sock,SOL_SOCKET,SL_SO_NONBLOCKING, &enableOption,sizeof(enableOption)) < 0)
     {
       CloseTCPClientSocket(sock);
       return -1;
     }
-#endif
+
     timeVal.tv_sec =  1;             // 1 Seconds
     timeVal.tv_usec = 0;             // Microseconds. 10000 microseconds resoultion
     if((sl_SetSockOpt(sock,SOL_SOCKET,SL_SO_RCVTIMEO, &timeVal, sizeof(timeVal))) < 0)
