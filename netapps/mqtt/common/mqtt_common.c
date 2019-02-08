@@ -44,7 +44,7 @@ static void reset_mqp(struct mqtt_packet *mqp)
         mqp->fh_len   = 0x00;
         mqp->vh_len   = 0;
         mqp->pl_len   = 0;
-        mqp->private  = 0;
+        mqp->is_private  = 0;
 }
 
 void mqp_reset(struct mqtt_packet *mqp)

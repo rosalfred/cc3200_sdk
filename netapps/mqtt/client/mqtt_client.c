@@ -283,18 +283,18 @@ static void mqp_free_locked(struct mqtt_packet *mqp)
 /* cor --> clear on read. */
 static bool mqp_do_not_report_cor(struct mqtt_packet *mqp)
 {
-        bool rv = (1 == mqp->private)? true : false;
-        mqp->private = 0;
+        bool rv = (1 == mqp->is_private)? true : false;
+        mqp->is_private = 0;
         return rv;
 }
 
 #define MQP_RX_DO_NOT_RPT_COR(mqp)     mqp_do_not_report_cor(mqp)
 
 /* Only if MQP has good RX data i.e. this macro shouldn't be used for bad RX */
-#define MQP_RX_DO_NOT_RPT_SET(mqp)    (mqp->private = 1)
+#define MQP_RX_DO_NOT_RPT_SET(mqp)    (mqp->is_private = 1)
 
-#define MQP_TX_DONE_LEN_ADD(mqp, add) (mqp->private += add)
-#define MQP_TX_DONE_LEN_GET(mqp)      (mqp->private)
+#define MQP_TX_DONE_LEN_ADD(mqp, add) (mqp->is_private += add)
+#define MQP_TX_DONE_LEN_GET(mqp)      (mqp->is_private)
 
 /*---------------------------Fix-Up Ends ------------------------------------*/
 

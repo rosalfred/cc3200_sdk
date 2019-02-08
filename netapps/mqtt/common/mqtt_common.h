@@ -154,7 +154,7 @@ struct mqtt_packet {
         u16                    vh_len;     /**< Var Header Length   */
         u32                    pl_len;     /**< Pay Load   Length   */
 
-        u32                    private;
+        u32                    is_private;
 
         u32                    maxlen;     /**< Maximum buffer size */
         u8                    *buffer;     /**< The attached buffer */
