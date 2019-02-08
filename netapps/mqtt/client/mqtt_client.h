@@ -84,7 +84,7 @@
     @{
 */
 
-#define MQTT_CLIENT_VERSTR "1.0.4" /**< Version of Client LIB */
+#define MQTT_CLIENT_VERSTR "1.4.0" /**< Version of Client LIB */
 
 /** Provides a new MSG Identifier for a packet dispatch to server
 
@@ -371,64 +371,6 @@ i32 mqtt_pingreq_send(void *ctx);
     @return number of bytes sent or Lib define errors (@ref lib_err_group)
 */
 i32 mqtt_disconn_send(void *ctx);
-
-
-/** Send remaining data or contents of the scheduled message to the server.
-    This routine tries to send the remaining data in an active transfer of a
-    message to the server. This service is valid, only if the network layer of
-    the platform is not able to send out the entire message in one TCP packet
-    and has to "back-off" or "give up the control" before it can schedule or
-    dispatch the next packet. In such a scenario, the network layer sends the
-    first part (segment) of the scheduled message in the mqtt_xxx_send() API and
-    the subsequent parts or the segments are sent using this routine.
-    
-    This routine is not applicable to the platforms or the scenarios, where the
-    implementation of the platform can segment the MQTT message in a manner to
-    schedule consercutive or back-to-back blocking socket transactions.
-    Specifically, this API must be used by an application, only if the network
-    layer can indicate in an asynchronous manner, its readiness to send the next
-    packet to the server. And the mechanism to indicate readiness of the network
-    layer for the next send transaction is out of band and out of scope for the
-    Client LIB and depends on the platform.
-
-    A platform that resorts to partial send of a message and has to back-off from
-    transmission implies the following the considerations on to the application.
-    (a) The next segment / part of the currently active MQTT packet can be sent
-    or scheduled only after receiving the indication, to do so, from the network
-    layer.
-    (b) The next or new MQTT message (or its first segment) can be scheduled for
-    transmission only after receiving the indication for completion of handling
-    of the last segment of currently active message.
-
-    @note The application developer should refer to the platform specific network
-    implementation for details.
-
-    The routine returns the number of remaining bytes in the message to be sent.
-    However, as described earlier, the application is expected to wait for an
-    indication about the readiness of the network layer prior to sending or
-    scheduling another segment, if so available, to the server. Now, the new
-    segment can be a next part of the currently active message or it can be the
-    first segment of a new message. A return value of zero means that there is
-    no more data left in the scheduled message to be sent to the server and the
-    application should wait for an appropriate event to indicate the transmission
-    of the last segment.
-
-    In case of an error, the transfer of the remaining segments or parts of the
-    scheduled message is aborted. Depending on the configuration of the 'clean
-    session' in-conjunction with the revision of the MQTT protocol, the active
-    message would be stored for re-transmission, MQTT connection is established
-    again. To store a message for re-transmission, at least one segment of the
-    message must have been successfully sent to the server.
-
-    @note This API must be used by the application only if the platform has the
-    capability to indicate the completion of the sending of an active segment.
-
-    @param[in] ctx handle to the underlying network context in the LIB
-    @see mqtt_client_ctx_create
-    @return the number of bytes remaining to be sent in the message. Otherwise,
-    LIB defined errors (@ref lib_err_group)
-*/
-i32 mqtt_client_send_progress(void *ctx);
 
 /** Block on the 'context' to receive a message type with-in specified wait time.
     This service is valid only for the configuration, where the application has

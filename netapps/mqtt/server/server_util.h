@@ -18,10 +18,7 @@
 
 #include "mqtt_common.h"
 
-#define my_malloc malloc
-#define my_free   free
-
-#define MQTT_SERVER_VERSTR "1.0.1"
+#define MQTT_SERVER_VERSTR "1.3.0"
 
 #define MIN(a,b) ((a > b)? b : a)
 

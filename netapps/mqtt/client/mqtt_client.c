@@ -85,16 +85,21 @@ static bool tx_part_setup(struct tx_part_pkt *tx_part, const u8 *buffer,
         return true;
 }
 
+static void _tx_part_reset(struct tx_part_pkt *tx_part)
+{
+        tx_part->vh_msg[0] = 0x00;
+        tx_part->tx_mqp    = NULL;
+        tx_part->length    = 0;
+        tx_part->offset    = 0;
+}
+
 static void tx_part_reset(struct tx_part_pkt *tx_part)
 {
         struct mqtt_packet *tx_mqp = tx_part->tx_mqp;
         if(tx_mqp)
                 mqp_free(tx_mqp);
 
-        tx_part->vh_msg[0] = 0x00;
-        tx_part->tx_mqp    = NULL;
-        tx_part->length    = 0;
-        tx_part->offset    = 0;
+        _tx_part_reset(tx_part);
 
         return;
 }
@@ -109,11 +114,6 @@ static const u8 *tx_part_buf_p(struct tx_part_pkt *tx_part)
                 tx_part->vh_msg + offset;
 }
 
-static void tx_part_addup(struct tx_part_pkt *tx_part, u32 offset)
-{
-        tx_part->offset += offset;
-}
-
 #define TX_PART_BUFFER(tx_part)  tx_part_buf_p(tx_part)
 #define TX_PART_BUF_SZ(tx_part) (tx_part->length - tx_part->offset)
 #define TX_PART_IN_USE(tx_part)  TX_PART_BUF_SZ(tx_part)
@@ -121,7 +121,7 @@ static void tx_part_addup(struct tx_part_pkt *tx_part, u32 offset)
 enum module_state {
 
         WAIT_INIT_STATE,
-        INIT_DONE_STATE = 0x01,
+        INIT_DONE_STATE = 0x01
 };
 
 static enum module_state cl_lib_state = WAIT_INIT_STATE;
@@ -169,6 +169,11 @@ static void cl_ctx_freeup(struct client_ctx *cl_ctx)
 #else
 #define MAX_NWCONN CFG_CL_MQTT_CTXS
 #endif
+
+/* Some servers terminate connection right at expiration of keep-alive.
+   Strictly for the debug purposes, the following macro can be used to
+   add to the termination period */
+#define KA_NW_ADD_DBG             0  /* Seconds */
 
 static struct client_desc {
 
@@ -342,6 +347,7 @@ static void session_delete(struct client_ctx *cl_ctx)
  *----------------------------------------------------------------------------*/
 static void do_net_close(struct client_ctx *cl_ctx)
 {
+        struct mqtt_packet *rx_mqp = CLIENT(cl_ctx)->rx_mqp;
         i32 net = cl_ctx->net;
 
         if(-1 == net)
@@ -354,7 +360,12 @@ static void do_net_close(struct client_ctx *cl_ctx)
                 session_311fix(cl_ctx);
         }
 
-        tx_part_reset(&CLIENT(cl_ctx)->tx_part); /* Part TX, if any */
+        /* The tx_mqp would be freed by the caller of the send oper */ 
+        _tx_part_reset(&CLIENT(cl_ctx)->tx_part);
+
+        CLIENT(cl_ctx)->rx_mqp = NULL;
+        if(rx_mqp && rx_mqp->free)
+                mqp_free(rx_mqp);    
 
         cl_ctx->flags &= ~(CONNACK_AWAIT_FLAG | NOW_CONNECTED_FLAG |
                            KA_PINGER_RSP_FLAG | USER_PING_RSP_FLAG |
@@ -393,15 +404,10 @@ static void do_net_close_tx(struct client_ctx *cl_ctx, c8 *cause)
                 if(A_GROUP_MEMBER(cl_ctx))
                         loopb_trigger();
         } else {
-                struct mqtt_packet *rx_mqp = CLIENT(cl_ctx)->rx_mqp;
+                //struct mqtt_packet *rx_mqp = CLIENT(cl_ctx)->rx_mqp;
 
                 do_net_close(cl_ctx);  /* No RX Task, close now */
 
-                /* Release partial MQP, if any, for a CTX w/ CB */
-                if((NULL != rx_mqp) && (NULL != rx_mqp->free))
-                        mqp_free(rx_mqp);
-
-                CLIENT(cl_ctx)->rx_mqp = NULL;
         }
 
         return;
@@ -456,7 +462,7 @@ static bool awaits_pkts(struct client_ctx *cl_ctx)
 
 static inline i32 len_err_free_mqp(struct mqtt_packet *mqp)
 {
-        mqp_free(mqp);
+        mqp_free_locked(mqp);
         return MQP_ERR_PKT_LEN;
 }
 
@@ -504,38 +510,8 @@ static inline i32 net_send(i32 net, const u8 *buf, u32 len, void *ctx)
         return rv;
 }
 
-#if 0
-static i32 cl_ctx_send(struct client_ctx *cl_ctx, const u8 *buf, u32 len,
-                       bool is_conn_msg)
-{        
-        i32 rv = MQP_ERR_NOTCONN; 
 
-        /* For CONNECT msg, a client context mustn't be already connected.
-           For others msgs, a client context must be conected to server */
-        if(false == (is_conn_msg ^ is_connected(cl_ctx)))
-                goto cl_ctx_send_exit1;
-
-        rv = net_send(cl_ctx->net, buf, len);
-        if(rv > 0) { /* A good send, do follow-up */
-                cl_ctx_timeout_update(cl_ctx, net_ops->time());
-                if(A_GROUP_MEMBER(cl_ctx) && HAS_CONNECTION(cl_ctx)) {
-                        /* With update to timeout,
-                           a sorting is impending */
-                        used_ctxs_TO_sort(cl_ctx);
-                }
-
-                goto cl_ctx_send_exit1; /* A Good Send */
-        }
-
-        do_net_close_tx(cl_ctx, "snd-err");
-
- cl_ctx_send_exit1:
-        USR_INFO("C: FH-B1 0x%02x, len %u bytes, to net %d: %s\n\r",
-                 *buf, len, cl_ctx->net, (rv > 0)? "Sent" : "Fail");
-        return rv;
-}
-#endif
-
+/* On completion of the send of the packet, this routine tries to free MQP */ 
 static i32 cl_ctx_part_send(struct client_ctx *cl_ctx)
 {
         struct tx_part_pkt *tx_part = &CLIENT(cl_ctx)->tx_part;
@@ -545,7 +521,7 @@ static i32 cl_ctx_part_send(struct client_ctx *cl_ctx)
         u8  B1  = *buf;
 
         i32 rv = net_send(cl_ctx->net, buf, len, (void*)cl_ctx);
-        if(rv > 0) { /* Follow-up for a good send */
+        if(rv > 0) {                /* Do Follow-up for a good send */
                 if(HAS_CONNECTION(cl_ctx)) {
                         /* Update TX timeout, if 'CTX' is connected */
                         cl_ctx_timeout_update(cl_ctx, net_ops->time());
@@ -557,11 +533,12 @@ static i32 cl_ctx_part_send(struct client_ctx *cl_ctx)
 
                 if(rv != len)
                         /* Partial data was sent */
-                        tx_part_addup(tx_part, rv);
+                        USR_INFO("C: control mustn't reach here, support for %s",
+                                     "partial transport is experimental only \n\r");
                 else
-                        tx_part_reset(tx_part);
+                        tx_part_reset(tx_part); /* Try Freeing MQP */
 
-                goto cl_ctx_send_exit1; /* A Good Send */
+                goto cl_ctx_send_exit1;             /* A Good Send */
         }
 
         do_net_close_tx(cl_ctx, "snd-err");
@@ -590,27 +567,6 @@ static i32 cl_ctx_seg1_send(struct client_ctx *cl_ctx, const u8 *buf, u32 len,
         tx_part_setup(tx_part, buf, len, tx_mqp);
 
         return cl_ctx_part_send(cl_ctx);
-}
-
-i32 mqtt_client_send_progress(void *ctx)
-{
-        struct client_ctx *cl_ctx = CL_CTX(ctx);
-        struct tx_part_pkt *tx_part = NULL;
-        i32 rv = MQP_ERR_BADCALL;
-
-        if(NULL == ctx)
-                return MQP_ERR_FNPARAM;
-
-        tx_part = &CLIENT(cl_ctx)->tx_part;
-
-        if(!TX_PART_IN_USE(tx_part))
-                return rv;
-
-        rv = cl_ctx_part_send(cl_ctx);
-        if(rv > 0)
-                rv = TX_PART_BUF_SZ(tx_part);
-
-        return rv;
 }
 
 static i32 wr_connect_pl(struct client_ctx *cl_ctx, u8 *buf,
@@ -673,7 +629,7 @@ static i32 wr_connect_vh(struct client_ctx *cl_ctx, u8 *buf,
                 buf += buf_wr_nbytes(buf, mqtt311, sizeof(mqtt311));
 
         *buf++ = conn_opts; 
-        buf += buf_wr_nbo_2B(buf, ka_secs);
+        buf += buf_wr_nbo_2B(buf, ka_secs + KA_NW_ADD_DBG);
 
         return buf - ref;
 }
@@ -693,7 +649,7 @@ static i32 net_connect(struct client_ctx *cl_ctx)
                                     client->port_number,
                                     &client->nw_security);
 
-        return (-1 == cl_ctx->net)? MQP_ERR_NETWORK : 0;
+        return (-1 == cl_ctx->net)? MQP_ERR_REMLSTN : 0;
 }
 
 static
@@ -774,9 +730,11 @@ i32 connect_msg_send(struct client_ctx *cl_ctx, bool clean_session, u16 ka_secs)
         ref = MQP_FHEADER_BUF(mqp);
 
         rv = cl_ctx_conn_state_try_locked(cl_ctx, ref, buf - ref,
-                                            ka_secs, clean_session,
-                                            mqp);
-											
+                                          ka_secs, clean_session,
+                                          mqp);
+        if(rv > 0)
+                mqp = NULL;  /* On success, send() routine would have freed-up */
+        
  connect_msg_send_exit1:
         if(mqp)
                 mqp_free_locked(mqp);
@@ -810,15 +768,16 @@ static i32 _msg_dispatch(struct client_ctx *cl_ctx, struct mqtt_packet *mqp,
         if(not_qos0)
                 mqp->n_refs++;   /* Need to enlist, do not free-up MQP */
 
-        /* Tries to free-up MQP either on error or if full pkt is sent */
+        /* Frees-up MQP, if full pkt has been sent successfully to net */
         rv = cl_ctx_seg1_send(cl_ctx, MQP_FHEADER_BUF(mqp),
                               MQP_CONTENT_LEN(mqp),  false,
                               mqp);
 
-        /* At this point, error or not, QoS0 MQP would have been freed */
+        if(rv <= 0) {         /* Error in sending the MQP - free it up */
+                if(not_qos0)
+                        mqp->n_refs--;
 
-        if((rv <= 0) && not_qos0) {
-                mqp_free(mqp); /* Err: Explicitly free-up non QoS0 MQP */
+                mqp_free(mqp);    /* Error: Explicitly free-up the MQP */
 
                 goto _msg_dispatch_exit1;
         }
@@ -951,7 +910,7 @@ static i32 utf8_array_send(struct client_ctx           *cl_ctx,
                 rv = buf_utf8_wr_try(buf, end - buf, topic, subsc_vec?
                                      (u8)subsc_vec[i].qosreq : QFL_VALUE);
                 if(rv < 0) {
-                        mqp_free(mqp);
+                        mqp_free_locked(mqp);
                         return rv;
                 }
 
@@ -1066,11 +1025,11 @@ static bool ack1_wl_mqp_dispatch(struct client_ctx *cl_ctx)
                 mqp->fh_byte1 = *buf |= DUP_FLAG_VAL(true);
 
                 mqp->n_refs++; /* Ensures MQP is not freed by following */
-
-                /* Error or not, following routine tries to free up MQP */
                 if(cl_ctx_seg1_send(cl_ctx, buf, MQP_CONTENT_LEN(mqp),
-                                    false, mqp) <= 0)
+                                    false, mqp) <= 0) {
+                        mqp->n_refs--; /* Error: need to retract n_refs */ 
                         rv = false;
+                }
         }
 
         return rv;
@@ -1394,8 +1353,8 @@ static i32 net_recv(i32 net, struct mqtt_packet *mqp, u32 wait_secs, void *ctx)
         bool timed_out = false;
         i32 rv = mqp_recv(net, net_ops, mqp, wait_secs, &timed_out, ctx);
         if(rv <= 0) {
-                USR_INFO("C: Net %d, Raw Error %d, Time Out: %c\n\r",
-                         net, rv, timed_out? 'Y' : 'N');
+                USR_INFO("C: Net %d, Raw Error %d, Time Out: %c [%u]\n\r",
+                         net, rv, timed_out? 'Y' : 'N', net_ops->time());
 
                 if(timed_out)
                         rv = MQP_ERR_TIMEOUT;
@@ -1454,12 +1413,18 @@ static i32 single_ctx_ka_sequence(struct client_ctx *cl_ctx, u32 wait_secs)
 
 static u32 single_ctx_adj_wait_secs_get(struct client_ctx *cl_ctx, u32 wait_secs)
 {
-        return (KA_TIMEOUT_NONE != cl_ctx->timeout)? 
-                MIN(cl_ctx->timeout - net_ops->time(), wait_secs) : wait_secs;
+        u32 secs = net_ops->time();
+
+        /* If 'secs' has gone past cl-timeout, then force new timeout to 1 sec */
+        secs = (cl_ctx->timeout > secs)? cl_ctx->timeout - secs : 1; 
+
+        return (KA_TIMEOUT_NONE != cl_ctx->timeout)?
+                MIN(secs, wait_secs) : wait_secs;
 }
 
 static i32 single_ctx_rx_prep(struct client_ctx *cl_ctx, u32 *secs2wait)
 {
+        //struct mqtt_packet *rx_mqp = CLIENT(cl_ctx)->rx_mqp;
         i32 rv;
 
         if(-1 == cl_ctx->net)
@@ -1475,6 +1440,19 @@ static i32 single_ctx_rx_prep(struct client_ctx *cl_ctx, u32 *secs2wait)
         }
 
         do_net_close_rx(cl_ctx, rv);
+
+
+        return rv;
+}
+
+static i32 single_ctx_rx_prep_locked(struct client_ctx *cl_ctx, u32 *secs2wait)
+{
+        i32 rv;
+
+        MUTEX_LOCKIN();
+        rv = single_ctx_rx_prep(cl_ctx, secs2wait);
+        MUTEX_UNLOCK();
+
         return rv;
 }
 
@@ -1516,6 +1494,7 @@ static i32 mqp_setup_proc_ctx_data_recv(struct client_ctx *cl_ctx,
         struct mqtt_packet *rx_mqp = CLIENT(cl_ctx)->rx_mqp;
         i32 rv;
 
+        CLIENT(cl_ctx)->rx_mqp = NULL;
         if(NULL != mqp) {
                 /* Input MQP must be same as MQP for partial RX, if any */
                 if(rx_mqp) {
@@ -1533,7 +1512,7 @@ static i32 mqp_setup_proc_ctx_data_recv(struct client_ctx *cl_ctx,
 
         rv = proc_ctx_data_recv(cl_ctx, mqp, wait_secs, app);
         if(rv == MQP_ERR_TIMEOUT) {
-                CLIENT(cl_ctx)->rx_mqp = mqp;  /* Save partial RX MQP */
+                CLIENT(cl_ctx)->rx_mqp = mqp;      /* Save partial RX MQP */
         } else {
                 /* Control reaches here due to either an error in RX or the
                    completion of RX. In both the cases, the MQP needs to be
@@ -1559,7 +1538,7 @@ static i32 cl_ctx_recv(struct client_ctx *cl_ctx, struct mqtt_packet *mqp,
                 if(mqp && (NULL == CLIENT(cl_ctx)->rx_mqp))
                         mqp_reset(mqp);
 
-                rv = single_ctx_rx_prep(cl_ctx, &wait_secs);
+                rv = single_ctx_rx_prep_locked(cl_ctx, &wait_secs);
                 if(rv > 0)
                         rv = mqp_setup_proc_ctx_data_recv(cl_ctx, mqp,
                                                           wait_secs,
@@ -1611,7 +1590,7 @@ static struct client_ctx *group_ctxs_ka_sequence(u32 wait_secs)
 
         while(cl_ctx) {
                 struct client_ctx *next = cl_ctx->next;
-                if(single_ctx_rx_prep(cl_ctx, &wait_secs) < 0) {
+                if(single_ctx_rx_prep_locked(cl_ctx, &wait_secs) < 0) {
                         /* 'CTX' no more eligible for operation
                            and has been removed from used_list */
                         if(false == grp_has_cbfn)
@@ -1829,6 +1808,7 @@ struct mqtt_packet *mqp_client_alloc(u8 msg_type, u8 offset)
 
         mqp_init(mqp, offset);
         mqp->msg_type = msg_type;
+        DBG_INFO("C: Alloc for %d %x\n\r", msg_type, mqp);
 
         return mqp;
 }
@@ -2019,6 +1999,20 @@ i32 mqtt_client_ctx_delete(void *ctx)
 
 i32 mqtt_client_lib_init(const struct mqtt_client_lib_cfg *lib_cfg)
 {
+		/* Initialise Module State */
+        net_ops = NULL;  
+        msg_id = 0xFFFF;
+        cl_lib_state = WAIT_INIT_STATE;
+        loopb_portid = 0;
+        grp_has_cbfn = false;
+        free_ctxs  = NULL;  /* CTX construct available */
+        used_ctxs  = NULL;  /* Relevant only for group */
+        conn_ctxs  = NULL;  /* Relevant only for group */
+        loopb_net  = -1;
+        send_hvec  = -1;
+        rsvd_hvec  = -1;
+        free_list = NULL;
+
         if((NULL == lib_cfg) || (NULL == lib_cfg->debug_printf))
                 return -1;
 

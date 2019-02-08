@@ -34,98 +34,90 @@
 //*****************************************************************************
 
 
-
 //*****************************************************************************
 //
-// Application Name     - Provisioning AP
-// Application Overview - CC3200 AP Provisioning is method by which user can
-//                        configure the AP information on the CC3200 device from
-//                        a Browser. The CC3200 device scans the Access Points,
-//                        stores them in the memory and create an HTML page with
-//                        the list of APs. User can open the HTML page and select
-//                        the AP which he/she wants to configure.
+// Application Name     -   Provisioning AP
+// Application Overview -   This is a sample application demonstrating how to
+//                          provision a CC3200 device.
+//
 // Application Details  -
-// http://processors.wiki.ti.com/index.php/CC32xx_Provisioning_AP
+// http://processors.wiki.ti.com/index.php/
 // or
-// docs\examples\CC32xx_Provisioning_AP.pdf
+// docs\examples\
 //
 //*****************************************************************************
 
 
 //****************************************************************************
 //
-//! \addtogroup ap_provisioning
+//! \addtogroup simplelink_provisioning
 //! @{
 //
 //****************************************************************************
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 // Simplelink includes
 #include "simplelink.h"
 
-
-//driverlib includes
+//Driverlib includes
 #include "hw_types.h"
 #include "hw_ints.h"
+#include "hw_memmap.h"
 #include "rom.h"
 #include "rom_map.h"
 #include "interrupt.h"
-#include "utils.h"
 #include "prcm.h"
+#include "utils.h"
+#include "timer.h"
 
-//Free_rtos/ti-rtos includes
-#include "osi.h"
+// Provisioning lib include
+#include "provisioning_api.h"
+#include "provisioning_defs.h"
 
-// common interface file
+//Common interface includes
+#include "pinmux.h"
+#include "gpio_if.h"
 #include "common.h"
+#include "timer_if.h"
 #ifndef NOTERM
 #include "uart_if.h"
 #endif
 
 
-#define APPLICATION_NAME          "AP Provisioning"
-#define APPLICATION_VERSION       "1.1.0"
-#define APP_TASK_PRIORITY         1
-#define OSI_STACK_SIZE            2048
-#define CONNECTION_TIMEOUT_COUNT  5000  /* 5sec */
-#define TOKEN_ARRAY_SIZE          6
-#define STRING_TOKEN_SIZE         10
-#define AP_SSID_LEN_MAX           33
+#define APPLICATION_NAME        "AP Provisioning"
+#define APPLICATION_VERSION     "1.1.1"
 
-#define SCAN_TABLE_SIZE           20
+
+#define WLAN_DEL_ALL_PROFILES   0xFF
+
+
+#define SL_PARAM_PRODUCT_VERSION_DATA 	"R1.0"
+#define PROVISIONING_TIMEOUT            300 //Number of seconds to wait for provisioning completion
+
 // Application specific status/error codes
 typedef enum{
-    // Choosing this number to avoid overlap w/ host-driver's error codes
+    // Choosing -0x7D0 to avoid overlap w/ host-driver's error codes
     LAN_CONNECTION_FAILED = -0x7D0,
-    CLIENT_CONNECTION_FAILED = LAN_CONNECTION_FAILED - 1,
-    DEVICE_NOT_IN_STATION_MODE = CLIENT_CONNECTION_FAILED - 1,
-
+    DEVICE_NOT_IN_STATION_MODE = LAN_CONNECTION_FAILED - 1,
     STATUS_CODE_MAX = -0xBB8
 }e_AppStatusCodes;
-
 
 
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
-unsigned char  g_ulStatus = 0;
-unsigned char g_ucProfileAdded = 1;
-unsigned char g_ucConnectedToConfAP = 0, g_ucProvisioningDone = 0;
-unsigned char g_ucPriority = 0;
+volatile unsigned long  g_ulStatus = 0;//SimpleLink Status
 unsigned long  g_ulGatewayIP = 0; //Network Gateway IP address
+unsigned long  g_ulStaIp = 0;
 unsigned char  g_ucConnectionSSID[SSID_LEN_MAX+1]; //Connection SSID
 unsigned char  g_ucConnectionBSSID[BSSID_LEN_MAX]; //Connection BSSID
-signed char g_cWlanSSID[AP_SSID_LEN_MAX];
-signed char g_cWlanSecurityKey[50];
-SlSecParams_t g_SecParams;
-Sl_WlanNetworkEntry_t g_NetEntries[SCAN_TABLE_SIZE];
-char g_token_get [TOKEN_ARRAY_SIZE][STRING_TOKEN_SIZE] = {"__SL_G_US0",
-                                        "__SL_G_US1", "__SL_G_US2","__SL_G_US3",
-                                                    "__SL_G_US4", "__SL_G_US5"};
 
+unsigned long 	g_ulTimerA2Base;
+_u8 volatile g_TimerATimedOut;
+_u8 volatile g_TimerBTimedOut;
+
+#if defined(ccs)
+extern void (* const g_pfnVectors[])(void);
+#endif
 #if defined(ewarm)
 extern uVectorEntry __vector_table;
 #endif
@@ -134,93 +126,17 @@ extern uVectorEntry __vector_table;
 //*****************************************************************************
 
 
-//*****************************************************************************
-//            Local Functions Prototypes
-//*****************************************************************************
-static long ConfigureSimpleLinkToDefaultState();
+//****************************************************************************
+//                      LOCAL FUNCTION PROTOTYPES
+//****************************************************************************
+int startProvisioning();
 static void BoardInit(void);
-static long WlanConnect(void);
-
-
-#ifdef USE_FREERTOS
-//*****************************************************************************
-// FreeRTOS User Hook Functions enabled in FreeRTOSConfig.h
-//*****************************************************************************
-
-//*****************************************************************************
-//
-//! \brief Application defined hook (or callback) function - assert
-//!
-//! \param[in]  pcFile - Pointer to the File Name
-//! \param[in]  ulLine - Line Number
-//!
-//! \return none
-//!
-//*****************************************************************************
-void
-vAssertCalled( const char *pcFile, unsigned long ulLine )
-{
-    //Handle Assert here
-    while(1)
-    {
-    }
-}
-
-//*****************************************************************************
-//
-//! \brief Application defined idle task hook
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
-void
-vApplicationIdleHook( void)
-{
-    //Handle Idle Hook for Profiling, Power Management etc
-}
-
-//*****************************************************************************
-//
-//! \brief Application defined malloc failed hook
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
-void vApplicationMallocFailedHook()
-{
-    //Handle Memory Allocation Errors
-    while(1)
-    {
-    }
-}
-
-//*****************************************************************************
-//
-//! \brief Application defined stack overflow hook
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
-void vApplicationStackOverflowHook( OsiTaskHandle *pxTask,
-                                   signed char *pcTaskName)
-{
-    //Handle FreeRTOS Stack Overflow
-    while(1)
-    {
-    }
-}
-#endif //USE_FREERTOS
-
+static void InitializeAppVariables();
 
 //*****************************************************************************
 // SimpleLink Asynchronous Event Handlers -- Start
 //*****************************************************************************
+
 
 //*****************************************************************************
 //
@@ -233,21 +149,25 @@ void vApplicationStackOverflowHook( OsiTaskHandle *pxTask,
 //*****************************************************************************
 void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
 {
+    if(!pWlanEvent)
+    {
+        return;
+    }
     switch(pWlanEvent->Event)
     {
         case SL_WLAN_CONNECT_EVENT:
         {
             SET_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
-            
+
             //
             // Information about the connected AP (like name, MAC etc) will be
-            // available in 'sl_protocol_wlanConnectAsyncResponse_t'-Applications
-            // can use it if required
+            // available in 'slWlanConnectAsyncResponse_t'
+            // Applications can use it if required
             //
-            //  sl_protocol_wlanConnectAsyncResponse_t *pEventData = NULL;
+            //  slWlanConnectAsyncResponse_t *pEventData = NULL;
             // pEventData = &pWlanEvent->EventData.STAandP2PModeWlanConnected;
             //
-            
+
             // Copy new connection SSID and BSSID to global parameters
             memcpy(g_ucConnectionSSID,pWlanEvent->EventData.
                    STAandP2PModeWlanConnected.ssid_name,
@@ -256,8 +176,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
                    pWlanEvent->EventData.STAandP2PModeWlanConnected.bssid,
                    SL_BSSID_LENGTH);
 
-            UART_PRINT("[WLAN EVENT] STA Connected to the AP: %s ,"
-                        "BSSID: %x:%x:%x:%x:%x:%x\n\r",
+            UART_PRINT("[WLAN EVENT] STA Connected to the AP: %s , "
+                       "BSSID: %x:%x:%x:%x:%x:%x\n\r",
                       g_ucConnectionSSID,g_ucConnectionBSSID[0],
                       g_ucConnectionBSSID[1],g_ucConnectionBSSID[2],
                       g_ucConnectionBSSID[3],g_ucConnectionBSSID[4],
@@ -267,19 +187,20 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
 
         case SL_WLAN_DISCONNECT_EVENT:
         {
-        	slWlanConnectAsyncResponse_t*  pEventData = NULL;
+            slWlanConnectAsyncResponse_t*  pEventData = NULL;
 
             CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
             CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_AQUIRED);
 
             pEventData = &pWlanEvent->EventData.STAandP2PModeDisconnected;
 
-            // If the user has initiated 'Disconnect' request, 
-            //'reason_code' is SL_USER_INITIATED_DISCONNECTION 
-            if(SL_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
+            // If the user has initiated 'Disconnect' request,
+            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION
+            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code)
             {
-                UART_PRINT("[WLAN EVENT]Device disconnected from the AP: %s,"
-                "BSSID: %x:%x:%x:%x:%x:%x on application's request \n\r",
+                UART_PRINT("[WLAN EVENT]Device disconnected from the AP: %s, "
+                           "BSSID: %x:%x:%x:%x:%x:%x on application's "
+                           "request \n\r",
                            g_ucConnectionSSID,g_ucConnectionBSSID[0],
                            g_ucConnectionBSSID[1],g_ucConnectionBSSID[2],
                            g_ucConnectionBSSID[3],g_ucConnectionBSSID[4],
@@ -287,8 +208,8 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
             }
             else
             {
-                UART_PRINT("[WLAN ERROR]Device disconnected from the AP AP: %s,"
-                "BSSID: %x:%x:%x:%x:%x:%x on an ERROR..!! \n\r",
+                UART_PRINT("[WLAN ERROR]Device disconnected from the AP AP: %s, "
+                           "BSSID: %x:%x:%x:%x:%x:%x on an ERROR..!! \n\r",
                            g_ucConnectionSSID,g_ucConnectionBSSID[0],
                            g_ucConnectionBSSID[1],g_ucConnectionBSSID[2],
                            g_ucConnectionBSSID[3],g_ucConnectionBSSID[4],
@@ -299,10 +220,46 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
         }
         break;
 
+        case SL_WLAN_STA_CONNECTED_EVENT:
+        {
+        	// when device is in AP mode and any client connects to device cc3xxx
+        	SET_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
+        	CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION_FAILED);
+
+        	//
+        	// Information about the connected client (like SSID, MAC etc) will
+        	// be available in 'slPeerInfoAsyncResponse_t' - Applications
+        	// can use it if required
+        	//
+        	// slPeerInfoAsyncResponse_t *pEventData = NULL;
+        	// pEventData = &pSlWlanEvent->EventData.APModeStaConnected;
+        	//
+
+        }
+        break;
+
+        case SL_WLAN_STA_DISCONNECTED_EVENT:
+        {
+        	// when client disconnects from device (AP)
+        	CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
+        	CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_LEASED);
+
+        	//
+        	// Information about the connected client (like SSID, MAC etc) will
+        	// be available in 'slPeerInfoAsyncResponse_t' - Applications
+        	// can use it if required
+        	//
+        	// slPeerInfoAsyncResponse_t *pEventData = NULL;
+        	// pEventData = &pSlWlanEvent->EventData.APModestaDisconnected;
+        	//
+        }
+        break;
+
+
         default:
         {
-            UART_PRINT("[WLAN EVENT] Unexpected event [0x%x]\n\r",
-                       pWlanEvent->Event);
+        	UART_PRINT("[WLAN EVENT] Unexpected event [0x%x]\n\r",
+        			pWlanEvent->Event);
         }
         break;
     }
@@ -313,13 +270,18 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pWlanEvent)
 //! \brief This function handles network events such as IP acquisition, IP
 //!           leased, IP released etc.
 //!
-//! \param[in]  pNetAppEvent - Pointer to NetApp Event Info 
+//! \param[in]  pNetAppEvent - Pointer to NetApp Event Info
 //!
 //! \return None
 //!
 //*****************************************************************************
 void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
 {
+    if(!pNetAppEvent)
+    {
+        return;
+    }
+
     switch(pNetAppEvent->Event)
     {
         case SL_NETAPP_IPV4_IPACQUIRED_EVENT:
@@ -327,15 +289,15 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
             SlIpV4AcquiredAsync_t *pEventData = NULL;
 
             SET_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_AQUIRED);
-            
+
             //Ip Acquired Event Data
             pEventData = &pNetAppEvent->EventData.ipAcquiredV4;
-            
+
             //Gateway IP address
             g_ulGatewayIP = pEventData->gateway;
-            
+
             UART_PRINT("[NETAPP EVENT] IP Acquired: IP=%d.%d.%d.%d , "
-            "Gateway=%d.%d.%d.%d\n\r", 
+                       "Gateway=%d.%d.%d.%d\n\r",
             SL_IPV4_BYTE(pNetAppEvent->EventData.ipAcquiredV4.ip,3),
             SL_IPV4_BYTE(pNetAppEvent->EventData.ipAcquiredV4.ip,2),
             SL_IPV4_BYTE(pNetAppEvent->EventData.ipAcquiredV4.ip,1),
@@ -344,6 +306,46 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
             SL_IPV4_BYTE(pNetAppEvent->EventData.ipAcquiredV4.gateway,2),
             SL_IPV4_BYTE(pNetAppEvent->EventData.ipAcquiredV4.gateway,1),
             SL_IPV4_BYTE(pNetAppEvent->EventData.ipAcquiredV4.gateway,0));
+        }
+        break;
+        case SL_NETAPP_IP_LEASED_EVENT:
+        {
+        	SET_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_LEASED);
+        	//UART_PRINT("[NETAPP EVENT] IP leased to a client\n\r");
+
+        	//
+        	// Information about the IP-Leased details(like IP-Leased,lease-time,
+        	// mac etc) will be available in 'SlIpLeasedAsync_t' - Applications
+        	// can use it if required
+        	//
+        	// SlIpLeasedAsync_t *pEventData = NULL;
+        	// pEventData = &pNetAppEvent->EventData.ipLeased;
+        	//
+
+        	SlIpLeasedAsync_t *pEventData = NULL;
+        	pEventData = &pNetAppEvent->EventData.ipLeased;
+        	g_ulStaIp = pEventData->ip_address;
+        	UART_PRINT("[NETAPP EVENT] IP Leased to Client: IP=%d.%d.%d.%d \n\r",
+        	                        SL_IPV4_BYTE(g_ulStaIp,3), SL_IPV4_BYTE(g_ulStaIp,2),
+        	                        SL_IPV4_BYTE(g_ulStaIp,1), SL_IPV4_BYTE(g_ulStaIp,0));
+        }
+        break;
+
+        case SL_NETAPP_IP_RELEASED_EVENT:
+        {
+        	CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_LEASED);
+        	UART_PRINT("[NETAPP EVENT] IP Released for Client: IP=%d.%d.%d.%d \n\r",
+        	                        SL_IPV4_BYTE(g_ulStaIp,3), SL_IPV4_BYTE(g_ulStaIp,2),
+        	                        SL_IPV4_BYTE(g_ulStaIp,1), SL_IPV4_BYTE(g_ulStaIp,0));
+
+        	//
+        	// Information about the IP-Released details (like IP-address, mac
+        	// etc) will be available in 'SlIpReleasedAsync_t' - Applications
+        	// can use it if required
+        	//
+        	// SlIpReleasedAsync_t *pEventData = NULL;
+        	// pEventData = &pNetAppEvent->EventData.ipReleased;
+        	//
         }
         break;
 
@@ -359,182 +361,19 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
 
 //*****************************************************************************
 //
-//! This function gets triggered when HTTP Server receives Application
-//! defined GET and POST HTTP Tokens.
+//! \brief This function handles HTTP server events
 //!
-//! \param pSlHttpServerEvent - Pointer indicating http server event
-//! \param pSlHttpServerResponse - Pointer indicating http server response
+//! \param[in]  pServerEvent - Contains the relevant event information
+//! \param[in]    pServerResponse - Should be filled by the user with the
+//!                                      relevant response information
 //!
 //! \return None
 //!
-//*****************************************************************************
-void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pSlHttpServerEvent,
-        SlHttpServerResponse_t *pSlHttpServerResponse)
+//****************************************************************************
+void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pHttpEvent,
+                                  SlHttpServerResponse_t *pHttpResponse)
 {
-
-    switch (pSlHttpServerEvent->Event)
-    {
-        case SL_NETAPP_HTTPGETTOKENVALUE_EVENT:
-        {
-
-            if(0== memcmp(pSlHttpServerEvent->EventData.httpTokenName.data, \
-                            g_token_get [0], \
-                            pSlHttpServerEvent->EventData.httpTokenName.len))
-            {
-                if(g_ucConnectedToConfAP == 1)
-                {
-                    // Important - Connection Status
-                    memcpy(pSlHttpServerResponse->ResponseData.token_value.data, \
-                            "TRUE",strlen("TRUE"));
-                    pSlHttpServerResponse->ResponseData.token_value.len = \
-                                                                strlen("TRUE");
-                }
-                else
-                {
-                    // Important - Connection Status
-                    memcpy(pSlHttpServerResponse->ResponseData.token_value.data, \
-                            "FALSE",strlen("FALSE"));
-                    pSlHttpServerResponse->ResponseData.token_value.len = \
-                                                                strlen("FALSE");
-                }
-            }
-
-            if(0== memcmp(pSlHttpServerEvent->EventData.httpTokenName.data, \
-                            g_token_get [1], \
-                            pSlHttpServerEvent->EventData.httpTokenName.len))
-            {
-                // Important - Token value len should be < MAX_TOKEN_VALUE_LEN
-                memcpy(pSlHttpServerResponse->ResponseData.token_value.data, \
-                        g_NetEntries[0].ssid,g_NetEntries[0].ssid_len);
-                pSlHttpServerResponse->ResponseData.token_value.len = \
-                                                      g_NetEntries[0].ssid_len;
-            }
-            if(0== memcmp(pSlHttpServerEvent->EventData.httpTokenName.data, \
-                            g_token_get [2], \
-                            pSlHttpServerEvent->EventData.httpTokenName.len))
-            {
-                // Important - Token value len should be < MAX_TOKEN_VALUE_LEN
-                memcpy(pSlHttpServerResponse->ResponseData.token_value.data, \
-                        g_NetEntries[1].ssid,g_NetEntries[1].ssid_len);
-                pSlHttpServerResponse->ResponseData.token_value.len = \
-                                                       g_NetEntries[1].ssid_len;
-            }
-            if(0== memcmp(pSlHttpServerEvent->EventData.httpTokenName.data, \
-                            g_token_get [3], \
-                            pSlHttpServerEvent->EventData.httpTokenName.len))
-            {
-                // Important - Token value len should be < MAX_TOKEN_VALUE_LEN
-                memcpy(pSlHttpServerResponse->ResponseData.token_value.data, \
-                        g_NetEntries[2].ssid,g_NetEntries[2].ssid_len);
-                pSlHttpServerResponse->ResponseData.token_value.len = \
-                                                       g_NetEntries[2].ssid_len;
-            }
-            if(0== memcmp(pSlHttpServerEvent->EventData.httpTokenName.data, \
-                            g_token_get [4], \
-                            pSlHttpServerEvent->EventData.httpTokenName.len))
-            {
-                // Important - Token value len should be < MAX_TOKEN_VALUE_LEN
-                memcpy(pSlHttpServerResponse->ResponseData.token_value.data, \
-                        g_NetEntries[3].ssid,g_NetEntries[3].ssid_len);
-                pSlHttpServerResponse->ResponseData.token_value.len = \
-                                                       g_NetEntries[3].ssid_len;
-            }
-            if(0== memcmp(pSlHttpServerEvent->EventData.httpTokenName.data, \
-                            g_token_get [5], \
-                            pSlHttpServerEvent->EventData.httpTokenName.len))
-            {
-                // Important - Token value len should be < MAX_TOKEN_VALUE_LEN
-                memcpy(pSlHttpServerResponse->ResponseData.token_value.data, \
-                        g_NetEntries[4].ssid,g_NetEntries[4].ssid_len);
-                pSlHttpServerResponse->ResponseData.token_value.len = \
-                                                      g_NetEntries[4].ssid_len;
-            }
-
-            else
-                break;
-
-        }
-        break;
-
-        case SL_NETAPP_HTTPPOSTTOKENVALUE_EVENT:
-        {
-
-            if((0 == memcmp(pSlHttpServerEvent->EventData.httpPostData.token_name.data, \
-                          "__SL_P_USC", \
-                 pSlHttpServerEvent->EventData.httpPostData.token_name.len)) && \
-            (0 == memcmp(pSlHttpServerEvent->EventData.httpPostData.token_value.data, \
-                     "Add", \
-                     pSlHttpServerEvent->EventData.httpPostData.token_value.len)))
-            {
-                g_ucProfileAdded = 0;
-
-            }
-            if(0 == memcmp(pSlHttpServerEvent->EventData.httpPostData.token_name.data, \
-                     "__SL_P_USD", \
-                     pSlHttpServerEvent->EventData.httpPostData.token_name.len))
-            {
-                memcpy(g_cWlanSSID,  \
-                pSlHttpServerEvent->EventData.httpPostData.token_value.data, \
-                pSlHttpServerEvent->EventData.httpPostData.token_value.len);
-                g_cWlanSSID[pSlHttpServerEvent->EventData.httpPostData.token_value.len] = 0;
-            }
-
-            if(0 == memcmp(pSlHttpServerEvent->EventData.httpPostData.token_name.data, \
-                         "__SL_P_USE", \
-                         pSlHttpServerEvent->EventData.httpPostData.token_name.len))
-            {
-
-                if(pSlHttpServerEvent->EventData.httpPostData.token_value.data[0] \
-                                                                        == '0')
-                {
-                    g_SecParams.Type =  SL_SEC_TYPE_OPEN;//SL_SEC_TYPE_OPEN
-    
-                }
-                else if(pSlHttpServerEvent->EventData.httpPostData.token_value.data[0] \
-                                                                        == '1')
-                {
-                    g_SecParams.Type =  SL_SEC_TYPE_WEP;//SL_SEC_TYPE_WEP
-
-                }
-                else if(pSlHttpServerEvent->EventData.httpPostData.token_value.data[0] == '2')
-                {
-                    g_SecParams.Type =  SL_SEC_TYPE_WPA;//SL_SEC_TYPE_WPA
-
-                }
-                else
-                {
-                    g_SecParams.Type =  SL_SEC_TYPE_OPEN;//SL_SEC_TYPE_OPEN
-                }
-            }
-            if(0 == memcmp(pSlHttpServerEvent->EventData.httpPostData.token_name.data, \
-                         "__SL_P_USF", \
-                         pSlHttpServerEvent->EventData.httpPostData.token_name.len))
-            {
-                memcpy(g_cWlanSecurityKey, \
-                    pSlHttpServerEvent->EventData.httpPostData.token_value.data, \
-                    pSlHttpServerEvent->EventData.httpPostData.token_value.len);
-                g_cWlanSecurityKey[pSlHttpServerEvent->EventData.httpPostData.token_value.len] = 0;
-                g_SecParams.Key = g_cWlanSecurityKey;
-                g_SecParams.KeyLen = pSlHttpServerEvent->EventData.httpPostData.token_value.len;
-            }
-            if(0 == memcmp(pSlHttpServerEvent->EventData.httpPostData.token_name.data, \
-                        "__SL_P_USG", \
-                        pSlHttpServerEvent->EventData.httpPostData.token_name.len))
-            {
-                g_ucPriority = pSlHttpServerEvent->EventData.httpPostData.token_value.data[0] - 48;
-            }
-            if(0 == memcmp(pSlHttpServerEvent->EventData.httpPostData.token_name.data, \
-                         "__SL_P_US0", \
-                         pSlHttpServerEvent->EventData.httpPostData.token_name.len))
-            {
-                g_ucProvisioningDone = 1;
-            }
-        }
-        break;
-        
-      default:
-          break;
-    }
+    // Unused in this application
 }
 
 //*****************************************************************************
@@ -548,6 +387,11 @@ void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pSlHttpServerEvent,
 //*****************************************************************************
 void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
 {
+    if(!pDevEvent)
+    {
+        return;
+    }
+
     //
     // Most of the general errors are not FATAL are are to be handled
     // appropriately by the application
@@ -569,28 +413,35 @@ void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
 //*****************************************************************************
 void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
 {
+    if(!pSock)
+    {
+        return;
+    }
+
     //
     // This application doesn't work w/ socket - Events are not expected
     //
-       switch( pSock->Event )
+    switch( pSock->Event )
     {
         case SL_SOCKET_TX_FAILED_EVENT:
-            switch( pSock->EventData.status )
+            switch( pSock->socketAsyncEvent.SockTxFailData.status)
             {
-                case SL_ECLOSE:
+                case SL_ECLOSE: 
                     UART_PRINT("[SOCK ERROR] - close socket (%d) operation "
-                    "failed to transmit all queued packets\n\n",
-                           pSock->EventData.sd);
+                                "failed to transmit all queued packets\n\n", 
+                                    pSock->socketAsyncEvent.SockTxFailData.sd);
                     break;
-                default:
-                    UART_PRINT("[SOCK ERROR] - TX FAILED : socket %d , reason"
-                        "(%d) \n\n",
-                           pSock->EventData.sd, pSock->EventData.status);
+                default: 
+                    UART_PRINT("[SOCK ERROR] - TX FAILED  :  socket %d , reason "
+                                "(%d) \n\n",
+                                pSock->socketAsyncEvent.SockTxFailData.sd, pSock->socketAsyncEvent.SockTxFailData.status);
+                  break;
             }
             break;
 
         default:
-            UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
+        	UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
+          break;
     }
 }
 
@@ -599,24 +450,120 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
 // SimpleLink Asynchronous Event Handlers -- End
 //*****************************************************************************
 
+void generalTimeoutHandler(void)
+{
+    Timer_IF_InterruptClear(TIMERA1_BASE);
+    g_TimerBTimedOut++;
+}
 
-//****************************************************************************
+// General waiting function using timer
+void waitmSec(_i32 timeout)
+{
+    //Initializes & Starts timer
+    Timer_IF_Init(PRCM_TIMERA1, TIMERA1_BASE, TIMER_CFG_ONE_SHOT, TIMER_A, 0);
+    Timer_IF_IntSetup(TIMERA1_BASE, TIMER_A, generalTimeoutHandler);
+
+    g_TimerBTimedOut = 0;
+
+    Timer_IF_Start(TIMERA1_BASE, TIMER_A, timeout);
+
+    while(g_TimerBTimedOut != 1)
+    {
+        // waiting...
+#ifndef SL_PLATFORM_MULTI_THREADED
+        _SlNonOsMainLoopTask();
+#endif
+    }
+
+    //Stops timer
+    Timer_IF_Stop(TIMERA1_BASE, TIMER_A);
+    Timer_IF_DeInit(TIMERA1_BASE, TIMER_A);
+}
+
+void timeoutHandler(void)
+{
+    Timer_IF_InterruptClear(TIMERA0_BASE);
+    g_TimerATimedOut++;
+}
+
+//*****************************************************************************
+// Provisioning Callbacks
+//*****************************************************************************
+_i8 sl_extlib_ProvEventTimeoutHdl(_u8* event, _i32 timeout)
+{
+    if(timeout == SL_EXT_PROV_WAIT_FOREVER)
+    {
+        // Waiting forever, no timeout
+        while(*event == FALSE)
+        {
+            // waiting...
+#ifndef SL_PLATFORM_MULTI_THREADED
+            _SlNonOsMainLoopTask();
+#endif
+        }
+    }
+    else
+    {
+    	//On CC3200, a value greater than 53687 will overflow the buffer,
+		//therefore divide the timeout into smaller pieces.
+		int divider = 10;
+
+		//Initializes & Starts timer
+		Timer_IF_Init(PRCM_TIMERA0, TIMERA0_BASE, TIMER_CFG_PERIODIC, TIMER_A, 0);
+		Timer_IF_IntSetup(TIMERA0_BASE, TIMER_A, timeoutHandler);
+
+		g_TimerATimedOut = 0;
+
+		Timer_IF_Start(TIMERA0_BASE, TIMER_A, timeout/divider);
+
+        //Check event or wait until timeout
+        while(*event == FALSE && g_TimerATimedOut != divider)
+        {
+            // waiting...
+#ifndef SL_PLATFORM_MULTI_THREADED
+            _SlNonOsMainLoopTask();
+#endif
+        }
+
+        //Stops timer
+		Timer_IF_Stop(TIMERA0_BASE, PRCM_TIMERA0);
+		Timer_IF_DeInit(TIMERA0_BASE, PRCM_TIMERA0);
+
+		// check if timeout occured
+		if(g_TimerATimedOut == divider)
+		{
+			return -1;
+		}
+
+    }
+
+
+    return 0;
+}
+
+void sl_extlib_ProvWaitHdl(_i32 timeout)
+{
+    waitmSec(timeout);
+}
+
+
+//*****************************************************************************
 //
-//!    \brief This function initializes the application variables
+//! \brief This function initializes the application variables
 //!
-//!    \param[in]  None
+//! \param    None
 //!
-//!    \return     None
-//
-//****************************************************************************
+//! \return None
+//!
+//*****************************************************************************
 static void InitializeAppVariables()
 {
-    g_ucProfileAdded = 1;
-    g_ucConnectedToConfAP = 0;
-    g_ucProvisioningDone = 0;
-	g_ulGatewayIP = 0;
+    g_ulStatus = 0;
+    g_ulGatewayIP = 0;
+    g_ulStaIp = 0;
+    //g_ConnectTimeoutCnt = 0;
     memset(g_ucConnectionSSID,0,sizeof(g_ucConnectionSSID));
-    memset(g_ucConnectionBSSID,0,sizeof(g_ucConnectionBSSID));	
+    memset(g_ucConnectionBSSID,0,sizeof(g_ucConnectionBSSID));
 }
 
 //*****************************************************************************
@@ -766,293 +713,24 @@ static long ConfigureSimpleLinkToDefaultState()
     return lRetVal; // Success
 }
 
-
-
-//****************************************************************************
-//
-//! Confgiures the mode in which the device will work
-//!
-//! \param iMode is the current mode of the device
-//!
-//!
-//! \return   SlWlanMode_t
-//! 				       
-//
-//****************************************************************************
-static int ConfigureMode(int iMode)
-{
-    long   lRetVal = -1;
-
-    lRetVal = sl_WlanSetMode(iMode);
-    ASSERT_ON_ERROR(lRetVal);
-
-    /* Restart Network processor */
-    lRetVal = sl_Stop(SL_STOP_TIMEOUT);
-    //ASSERT_ON_ERROR(lRetVal);
-
-    // reset status bits
-    CLR_STATUS_BIT_ALL(g_ulStatus);
-
-    return sl_Start(NULL,NULL,NULL);
-}
-
-//****************************************************************************
-//
-//! \brief Connecting to a WLAN Accesspoint
-//!
-//!  This function connects to the required AP (SSID_NAME) with Security
-//!  parameters specified in te form of macros at the top of this file
-//!
-//! \param  None
-//!
-//! \return  0 - Success
-//!            -1 - Failure
-
-//!
-//! \warning    If the WLAN connection fails or we don't aquire an IP 
-//!            address, It will be stuck in this function forever.
-//
-//****************************************************************************
-static long WlanConnect()
-{
-	long lRetVal = -1;
-	unsigned int uiConnectTimeoutCnt =0;
-	
-    //Add Profile
-	lRetVal = sl_WlanProfileAdd(g_cWlanSSID, strlen((char*)g_cWlanSSID), 0, &g_SecParams,
-                        0,g_ucPriority,0);
-	ASSERT_ON_ERROR(lRetVal);
-
-    //Connecting to the Access point
-	lRetVal = sl_WlanConnect(g_cWlanSSID, strlen((char*)g_cWlanSSID), 0, &g_SecParams, 0);
-	ASSERT_ON_ERROR(lRetVal);
-
-    // Wait for WLAN Event
-    while(uiConnectTimeoutCnt<CONNECTION_TIMEOUT_COUNT &&
-		((!IS_CONNECTED(g_ulStatus)) || (!IS_IP_ACQUIRED(g_ulStatus)))) 
-    { 
-        osi_Sleep(1); //Sleep 1 millisecond
-        uiConnectTimeoutCnt++;
-
-    }
-	
-	return SUCCESS;
-
-}
-
-
-
 //*****************************************************************************
 //
-//! \brief This function Get the Scan Result
+//! Application startup display on UART
 //!
-//! \param[out]      netEntries - Scan Result 
+//! \param  none
 //!
-//! \return         Success - Size of Scan Result Array
-//!                    Failure   - -1 
+//! \return none
 //!
-//! \note
-//!
-//
 //*****************************************************************************
-static int GetScanResult(Sl_WlanNetworkEntry_t* netEntries )
+static void
+DisplayBanner(char * AppName)
 {
-    unsigned char   policyOpt;
-    unsigned long IntervalVal = 60;
-    int lRetVal;
-
-    policyOpt = SL_CONNECTION_POLICY(0, 0, 0, 0, 0);
-    lRetVal = sl_WlanPolicySet(SL_POLICY_CONNECTION , policyOpt, NULL, 0);
-	ASSERT_ON_ERROR(lRetVal);
-
-
-    // enable scan
-    policyOpt = SL_SCAN_POLICY(1);
-
-    // set scan policy - this starts the scan
-    lRetVal = sl_WlanPolicySet(SL_POLICY_SCAN , policyOpt,
-                            (unsigned char *)(IntervalVal), sizeof(IntervalVal));
-	ASSERT_ON_ERROR(lRetVal);
-		
-	
-    // delay 1 second to verify scan is started
-    osi_Sleep(1000);
-
-    // lRetVal indicates the valid number of entries
-    // The scan results are occupied in netEntries[]
-    lRetVal = sl_WlanGetNetworkList(0, SCAN_TABLE_SIZE, netEntries);
-	ASSERT_ON_ERROR(lRetVal);
-
-    // Disable scan
-    policyOpt = SL_SCAN_POLICY(0);
-
-    // set scan policy - this stops the scan
-    sl_WlanPolicySet(SL_POLICY_SCAN , policyOpt,
-                            (unsigned char *)(IntervalVal), sizeof(IntervalVal));
-	ASSERT_ON_ERROR(lRetVal);	
-
-    return lRetVal;
-
+    Report("\n\n\n\r");
+    Report("\t\t *************************************************\n\r");
+    Report("\t\t       CC3200 %s Application       \n\r", AppName);
+    Report("\t\t *************************************************\n\r");
+    Report("\n\n\n\r");
 }
-
-//****************************************************************************
-//
-//! Task function implements the ProvisioningAP functionality
-//!
-//! \param none
-//! 
-//! This function  
-//!    1. Starts Device in STA Mode
-//!    2. Scans and Stores all the AP
-//!    3. Switch to AP Mode and Wait for AP Configuration from Browser
-//!    4. Switch to STA Mode and Connect to Configured AP
-//!
-//! \return None.
-//
-//****************************************************************************
-void ProvisioningAP(void* pTaskParams)
-{
-   long lCountSSID;
-   long lRetVal = -1;
-
-    InitializeAppVariables();
-
-    //
-    // Following function configure the device to default state by cleaning
-    // the persistent settings stored in NVMEM (viz. connection profiles &
-    // policies, power policy etc)
-    //
-    // Applications may choose to skip this step if the developer is sure
-    // that the device is in its default state at start of applicaton
-    //
-    // Note that all profiles and persistent settings that were done on the
-    // device will be lost
-    //
-   lRetVal = ConfigureSimpleLinkToDefaultState();
-   if(lRetVal < 0)
-   {
-       if (DEVICE_NOT_IN_STATION_MODE == lRetVal)
-       {
-           UART_PRINT("Failed to configure the device in its default state\n\r");
-       }
-
-       LOOP_FOREVER();
-   }
-
-    UART_PRINT("Device is configured in default state \n\r");
-
-	//
-	// Assumption is that the device is configured in station mode already
-	// and it is in its default state
-	//
-	lRetVal = sl_Start(0, 0, 0);
-	if (lRetVal < 0 || ROLE_STA != lRetVal)
-	{
-	   UART_PRINT("Failed to start the device \n\r");
-	   LOOP_FOREVER();
-	}
-
-	UART_PRINT("Device started as STATION \n\r");
-    
-    
-  
-    while(!g_ucProvisioningDone)
-    {   
-      
-        //Get Scan Result
-        lCountSSID = GetScanResult(&g_NetEntries[0]);
-        if(lCountSSID < 0)
-        {
-            ERR_PRINT(lRetVal);
-            LOOP_FOREVER();
-        }	
-        //
-        // Configure to AP Mode
-        // 
-        if(ConfigureMode(ROLE_AP) !=ROLE_AP)
-        {
-            UART_PRINT("Unable to set AP mode...\n\r");
-            lRetVal = sl_Stop(SL_STOP_TIMEOUT);
-            CLR_STATUS_BIT_ALL(g_ulStatus);
-            LOOP_FOREVER();
-        }
-
-        while(!IS_IP_ACQUIRED(g_ulStatus))
-        {
-          //looping till ip is acquired
-        }
-
-        //Stop Internal HTTP Server
-        lRetVal = sl_NetAppStop(SL_NET_APP_HTTP_SERVER_ID);
-        if(lRetVal < 0)
-        {
-            ERR_PRINT(lRetVal);
-            LOOP_FOREVER();
-        }
-
-        //Start Internal HTTP Server
-        lRetVal = sl_NetAppStart(SL_NET_APP_HTTP_SERVER_ID);
-        if(lRetVal < 0)
-        {
-            ERR_PRINT(lRetVal);
-            LOOP_FOREVER();
-        }
-
-	 //
-	// Wait for AP Configuraiton, Open Browser and Configure AP
-	//
-	while(g_ucProfileAdded && !g_ucProvisioningDone)
-	{
-		MAP_UtilsDelay(100);
-	}
-
-	g_ucProfileAdded = 1;
-
-        //
-        // Configure to STA Mode
-        // 
-        if(ConfigureMode(ROLE_STA) !=ROLE_STA)
-        {
-            UART_PRINT("Unable to set STA mode...\n\r");
-            lRetVal = sl_Stop(SL_STOP_TIMEOUT);
-            CLR_STATUS_BIT_ALL(g_ulStatus);
-            LOOP_FOREVER();
-        }
-
-
-        //
-        // Connect to the Configured Access Point
-        //
-        lRetVal = WlanConnect();
-            if(lRetVal < 0)
-            {
-                    ERR_PRINT(lRetVal);
-                    LOOP_FOREVER();
-            }	
-
-        g_ucConnectedToConfAP = IS_CONNECTED(g_ulStatus);
-
-        lRetVal = sl_WlanDisconnect();
-        if(0 == lRetVal)
-        {
-            // Wait
-            while(IS_CONNECTED(g_ulStatus))
-            {
-#ifndef SL_PLATFORM_MULTI_THREADED
-                _SlNonOsMainLoopTask(); 
-#endif
-            }
-        }
-        CLR_STATUS_BIT_ALL(g_ulStatus);
-    }
-   
-    while(1)
-    {
-
-    }
-
-}
-
 
 //*****************************************************************************
 //
@@ -1066,11 +744,18 @@ void ProvisioningAP(void* pTaskParams)
 static void
 BoardInit(void)
 {
-
+	// In case of TI-RTOS vector table is initialize by OS itself
+#ifndef USE_TIRTOS
+    //
+    // Set vector table base
+    //
+#if defined(ccs)
+    MAP_IntVTableBaseSet((unsigned long)&g_pfnVectors[0]);
+#endif
 #if defined(ewarm)
     MAP_IntVTableBaseSet((unsigned long)&__vector_table);
 #endif
-    
+#endif
     //
     // Enable Processor
     //
@@ -1080,66 +765,169 @@ BoardInit(void)
     PRCMCC3200MCUInit();
 }
 
-//****************************************************************************
+//*****************************************************************************
 //
-//! Main function
+//! \brief Function for handling provisioning (adding a profile to a new AP).
 //!
-//! \param none
-//! 
-//! This function  
-//!    1. Invokes the SLHost task
-//!    2. Invokes the AP Provisioning Task
+//! This function assumes running mostly on first time configurations, so
+//! one time settings are handled here.
 //!
-//! \return None.
-//
-//****************************************************************************
-void main()
+//! \param[in]		None
+//!
+//! \return         None
+//!
+//*****************************************************************************
+int startProvisioning(void)
 {
-	long lRetVal = -1;
+	long				lRetVal = -1;
+	long 				FileHandle = 0;
+	slExtLibProvCfg_t	cfg;
+	SlFsFileInfo_t 		FsFileInfo;
 
+
+	UART_PRINT("Starting Provisioning..\n\r");
+
+
+	// Enable RX Statistics
+	sl_WlanRxStatStart();
+
+	// Check if version token file exists in the device FS.
+	// If not, than create a file and write the required token
+
+	// Creating the param_product_version.txt file once
+	if (SL_FS_ERR_FILE_NOT_EXISTS == sl_FsGetInfo(SL_FILE_PARAM_PRODUCT_VERSION, 0 , &FsFileInfo))
+	{
+		sl_FsOpen(SL_FILE_PARAM_PRODUCT_VERSION, FS_MODE_OPEN_CREATE(100, _FS_FILE_OPEN_FLAG_COMMIT), NULL, &FileHandle);
+		sl_FsWrite(FileHandle, NULL, SL_PARAM_PRODUCT_VERSION_DATA, strlen(SL_PARAM_PRODUCT_VERSION_DATA));
+		sl_FsClose(FileHandle, NULL, NULL, NULL);
+	}
+
+	// Creating the config result file once
+	if (SL_FS_ERR_FILE_NOT_EXISTS == sl_FsGetInfo(SL_FILE_PARAM_CFG_RESULT, 0 , &FsFileInfo))
+	{
+		sl_FsOpen(SL_FILE_PARAM_CFG_RESULT, FS_MODE_OPEN_CREATE(100, _FS_FILE_OPEN_FLAG_COMMIT), NULL, &FileHandle);
+		sl_FsWrite(FileHandle, NULL, GET_CFG_RESULT_TOKEN, strlen(GET_CFG_RESULT_TOKEN));
+		sl_FsClose(FileHandle, NULL, NULL, NULL);
+	}
+
+	// Creating the param device name file once/
+	if (SL_FS_ERR_FILE_NOT_EXISTS == sl_FsGetInfo(SL_FILE_PARAM_DEVICE_NAME, 0 , &FsFileInfo))
+	{
+		sl_FsOpen(SL_FILE_PARAM_DEVICE_NAME, FS_MODE_OPEN_CREATE(100, _FS_FILE_OPEN_FLAG_COMMIT), NULL, &FileHandle);
+		sl_FsWrite(FileHandle, NULL, GET_DEVICE_NAME_TOKEN, strlen(GET_DEVICE_NAME_TOKEN));
+		sl_FsClose(FileHandle, NULL, NULL, NULL);
+	}
+
+	// Creating the netlist name file once/
+	if (SL_FS_ERR_FILE_NOT_EXISTS == sl_FsGetInfo(SL_FILE_NETLIST, 0 , &FsFileInfo))
+	{
+		sl_FsOpen(SL_FILE_NETLIST, FS_MODE_OPEN_CREATE(100, _FS_FILE_OPEN_FLAG_COMMIT), NULL, &FileHandle);
+		sl_FsWrite(FileHandle, NULL, SL_SET_NETLIST_TOKENS, strlen(SL_SET_NETLIST_TOKENS));
+		sl_FsClose(FileHandle, NULL, NULL, NULL);
+	}
+
+	// Initializes configuration
+	cfg.IsBlocking         = 1;    //Unused
+	cfg.AutoStartEnabled   = 0;
+	cfg.Timeout10Secs      = PROVISIONING_TIMEOUT/10;
+	cfg.ModeAfterFailure   = ROLE_STA;
+	cfg.ModeAfterTimeout   = ROLE_STA;
+
+	lRetVal = sl_extlib_ProvisioningStart(ROLE_STA, &cfg);
+	ASSERT_ON_ERROR(lRetVal);
+
+	// Wait for WLAN Event
+	while((!IS_CONNECTED(g_ulStatus)) || (!IS_IP_ACQUIRED(g_ulStatus)))
+	{
+		_SlNonOsMainLoopTask();
+	}
+
+	//
+	// Turn ON the RED LED to indicate connection success
+	//
+	GPIO_IF_LedOn(MCU_RED_LED_GPIO);
+
+	//wait for few moments
+	MAP_UtilsDelay(80000000);
+
+	return SUCCESS;
+}
+
+
+int main(void)
+{
+    long lRetVal = -1;
     //
     // Initialize Board configurations
     //
-    BoardInit();   
-    
+
+    BoardInit();
+    //
+    // Configure the pinmux settings for the peripherals exercised
+    //
+    PinMuxConfig();
+
 #ifndef NOTERM
-    //
-    // Configuring UART
-    //
     InitTerm();
 #endif
 
     //
-    // Simplelinkspawntask
-    //
-    lRetVal = VStartSimpleLinkSpawnTask(SPAWN_TASK_PRIORITY);
-    if(lRetVal < 0)
-    {
-        ERR_PRINT(lRetVal);
-        LOOP_FOREVER();
-    }	
-    //
-    // Start the AP Provisioning task
-    //    
-    
-	lRetVal = osi_TaskCreate(ProvisioningAP, (signed char*)"ProvisioningAP",
-                    OSI_STACK_SIZE, NULL, APP_TASK_PRIORITY, NULL );
-    if(lRetVal < 0)
-    {
-        ERR_PRINT(lRetVal);
-        LOOP_FOREVER();
-    }
-    //
-    // Start the task scheduler
-    //	
-    osi_start();
+	// Display banner
+	//
+	DisplayBanner(APPLICATION_NAME);
 
-    
+    // configure RED LED
+    GPIO_IF_LedConfigure(LED1);
+
+    GPIO_IF_LedOff(MCU_RED_LED_GPIO);
+
+    InitializeAppVariables();
+
+    //
+   // Following function configure the device to default state by cleaning
+   // the persistent settings stored in NVMEM (viz. connection profiles &
+   // policies, power policy etc)
+   //
+   // Applications may choose to skip this step if the developer is sure
+   // that the device is in its default state at start of applicaton
+   //
+   // Note that all profiles and persistent settings that were done on the
+   // device will be lost
+   //
+   lRetVal = ConfigureSimpleLinkToDefaultState();
+   if(lRetVal < 0)
+   {
+       if (DEVICE_NOT_IN_STATION_MODE == lRetVal)
+           UART_PRINT("Failed to configure the device in its "
+                         "default state \n\r");
+
+       LOOP_FOREVER();
+   }
+
+   UART_PRINT("Device is configured in default state \n\r");
+
+   CLR_STATUS_BIT_ALL(g_ulStatus);
+
+   //Start simplelink
+   lRetVal = sl_Start(0,0,0);
+   if (lRetVal < 0 || ROLE_STA != lRetVal)
+   {
+       UART_PRINT("Failed to start the device \n\r");
+       LOOP_FOREVER();
+   }
+
+   UART_PRINT("Device started as STATION \n\r");
+
+   // Connect to our AP using SmartConfig method
+   lRetVal = startProvisioning();
+   if(lRetVal < 0)
+   {
+	   ERR_PRINT(lRetVal);
+   }    
+   else
+   {
+	   UART_PRINT("Provisioning Succedded \n\r");
+   }
+
+   LOOP_FOREVER();
 }
-
-//*****************************************************************************
-//
-// Close the Doxygen group.
-//! @}
-//
-//*****************************************************************************

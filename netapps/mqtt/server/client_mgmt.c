@@ -188,12 +188,23 @@ static inline bool qos2_pub_rx_is_done(struct client_usr *cl_usr, u16 msg_id)
         return qos2_pub_cq_check(&cl_usr->qos2_rx_cq, msg_id);
 }
 
-bool cl_mgmt_qos2_pub_rx_update(void *usr_cl, u16 msg_id)
+i32 cl_mgmt_qos2_pub_rx_update(void *usr_cl, u16 msg_id)
 {
         struct client_usr *cl_usr = (struct client_usr*) usr_cl;
 
-        return cl_usr && (qos2_pub_rx_is_done(cl_usr, msg_id) ||
-                          qos2_pub_rx_logup(cl_usr, msg_id));
+        if(NULL == cl_usr)
+                return -1;
+
+        /* Ensuring "only once" philosophy for MQTT QoS2 PUBs */
+        if(qos2_pub_rx_is_done(cl_usr, msg_id)) {
+                /* Already delivered. Drop it & don't forward */
+                return 0;    /* No more follow-up; all's good */
+        }
+
+        if(false == qos2_pub_rx_logup(cl_usr, msg_id))
+                return -1;     /* Failed to record New RX PUB */
+
+        return 1;              /* ID Recorded and forward msg */
 }
 
 static void ack2_msg_id_dispatch(struct client_usr *cl_usr)
@@ -203,9 +214,10 @@ static void ack2_msg_id_dispatch(struct client_usr *cl_usr)
         u8 n_free = tx_cq->n_free;
         u8 i = 0;
 
-        for(i = rd_idx; i < (MAX_PUBREL_INFLT - n_free); i++) {
-                if(mqtt_vh_msg_send(cl_usr->ctx, MQTT_PUBREL, MQTT_QOS1,
-                                    true, tx_cq->id_vec[i]) <= 0)
+        for(i = 0; i < (MAX_PUBREL_INFLT - n_free); i++, rd_idx++) {
+                rd_idx &= MAX_PUBREL_INFLT - 1;
+                if(mqtt_vh_msg_send(cl_usr->ctx,  MQTT_PUBREL,  MQTT_QOS1,
+                                    true, tx_cq->id_vec[rd_idx]) <= 0)
                         break;
         }
 
@@ -235,6 +247,38 @@ static struct mqtt_ack_wlist *sess_mqp_wl = &wl_mqp_sess;
 #define MQP_CL_MAP_CLR(mqp, cl_map) (mqp->private &= ~cl_map)
 
 #define CL_BMAP(cl_usr)             (1 << cl_usr->index)
+
+
+static u32 wl_qos2_mqp_count(const struct mqtt_packet  *head,
+                             const struct client_usr *cl_usr)
+{
+        const struct mqtt_packet *mqp = NULL;
+        u32 bmap  = CL_BMAP(cl_usr);
+        u32 count = 0;
+
+        for(mqp = head; NULL != mqp; mqp = mqp->next)  {
+                enum mqtt_qos qos = ENUM_QOS(mqp->fh_byte1); /* QOS */
+                if((MQTT_QOS2 == qos) && (bmap & MQP_CL_MAP_GET(mqp)))
+                        count++;
+        }
+
+        return count;
+}
+
+static bool can_mqp_sched(enum mqtt_qos qos, const struct client_usr *cl_usr)
+{
+        u32 n_qued = 0;
+
+        if(MQTT_QOS2 != qos)
+                return true;
+
+        /* QOS2 MQP transaction: let's ensure that adequate resources exist*/
+        n_qued += wl_qos2_mqp_count(qos_ack1_wl->head, cl_usr);
+        n_qued += wl_qos2_mqp_count(sess_mqp_wl->head, cl_usr);
+        n_qued += MAX_PUBREL_INFLT - cl_usr->qos2_tx_cq.n_free;
+
+        return (n_qued < MAX_PUBREL_INFLT)? true : false;
+}
 
 static inline
 i32 _pub_dispatch(struct client_usr *cl_usr, struct mqtt_packet *mqp,
@@ -316,7 +360,10 @@ static void pub_dispatch(u32 cl_map, struct mqtt_packet *mqp)
         for(i = 0; i < MAX_CLIENTS; i++) {
                 if(cl_map & (1 << i)) {
                         struct client_usr *cl_usr = users + i; //find_cl_usr(i);
-                        if(is_connected(cl_usr))
+                        bool drop_mqp = false;
+                        if(false == can_mqp_sched(qos, cl_usr))
+                                drop_mqp = true; /* CL: resources inadequate */
+                        else if(is_connected(cl_usr))
                                 if((_pub_dispatch(cl_usr, mqp, false) > 0)  &&
                                    NEED_TO_WAIT_LIST_PUBLISH(qos, cl_usr))
                                         continue;/* Processing done; next CL */
@@ -324,7 +371,7 @@ static void pub_dispatch(u32 cl_map, struct mqtt_packet *mqp)
                         /* CL: unconnected / PUB Err / QOS1 PKT (clean sess) */
                         cl_map &= ~(1 << i); 
 
-                        if(IS_CL_INACTIVE(cl_usr)) 
+                        if((false == drop_mqp) && IS_CL_INACTIVE(cl_usr)) 
                                 sp_map |= (1 << i);  /* CL: Maintain session */
                 }
         }
@@ -416,6 +463,7 @@ static void sess_wl_mqp_dispatch(struct client_usr *cl_usr)
         for(mqp = sess_mqp_wl->head; NULL != mqp; prev = mqp, mqp = next) {
                 struct mqtt_packet *cpy = NULL;
 
+                next = mqp->next;            /* House keeping */
                 if(0 == (MQP_CL_MAP_GET(mqp) & cl_map))
                         continue; /* MQP & CL: no association */
 
@@ -423,7 +471,6 @@ static void sess_wl_mqp_dispatch(struct client_usr *cl_usr)
 
                 /* Dissociate this client from MQP */
                 MQP_CL_MAP_CLR(mqp, cl_map);
-                next = mqp->next; /* House keeping */
 
                 if(0 == MQP_CL_MAP_GET(mqp)) {
                         /* MQP w/ no clients,  remove from WL */
@@ -526,8 +573,8 @@ static void sess_wl_mqp_purge(struct client_usr *cl_usr)
 
 static void session_resume(struct client_usr *cl_usr)
 {
-        ack1_wl_mqp_dispatch(cl_usr);
         ack2_msg_id_dispatch(cl_usr);
+        ack1_wl_mqp_dispatch(cl_usr);
         sess_wl_mqp_dispatch(cl_usr);
 }
 
@@ -576,6 +623,7 @@ bool cl_can_session_delete(void *usr_cl)
 void cl_on_net_close(void *usr_cl)
 {
         struct client_usr *cl_usr = (struct client_usr*) usr_cl;
+        cl_usr->will = NULL; /* Discard reference to Will Info */
 
         if(is_assigned(cl_usr)) {
                 if(false == has_session_data(cl_usr))

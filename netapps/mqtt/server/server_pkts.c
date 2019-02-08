@@ -56,6 +56,7 @@ static i32 mqp_buf_rd_utf8(const u8 *buf, const u8 *end,
 
 static struct mqtt_server_msg_cbs usr_obj, *usr_cbs = NULL;
 static const struct device_net_services *net_ops = NULL;
+static struct secure_conn nw_sec_obj, *nw_security;
 
 #ifndef CFG_SR_MQTT_CTXS
 #define MAX_NWCONN 6
@@ -130,23 +131,46 @@ static void used_ctxs_remove(struct client_ctx *cl_ctx)
 }
 
 static i32 loopb_net        = -1;
-static const u8 LOOP_DATA[] = {0x00, 0x01};
-#define LOOP_DLEN sizeof(LOOP_DATA)
-static u16  loopback_port   = 0;
-static bool pending_trigs   = false;
+#define LPBK_DLEN              2
 
-static i32 loopb_trigger(void)
+#define LPBK_WAKE_UP_MHDR    0x01
+#define LPBK_NW_TEAR_MHDR    0x02
+
+static const u8 lpbk_wake_up_msg[LPBK_DLEN] = {LPBK_WAKE_UP_MHDR, 0xfe};
+static const u8 lpbk_nw_tear_msg[LPBK_DLEN] = {LPBK_NW_TEAR_MHDR, 0xfd};
+
+static u16  loopback_port   = 0;
+
+static volatile bool pending_trigs   = false;
+static volatile bool mon_loop_flag   = true;
+
+static i32 loopb_trigger(const u8 *buf, u32 len)
 {
         u8 ip_addr[] = {127,0,0,1};
-        i32 rv = 0;
-        
-        if((-1 != loopb_net) && (false == pending_trigs)) {
-                rv = net_ops->send_dest(loopb_net, LOOP_DATA, LOOP_DLEN,
-                                        loopback_port, ip_addr, 4);
-                if(0 == rv)
+        i32 rv = -1;
+
+        if((-1 != loopb_net) && len) {
+                rv = len;
+                if((LPBK_WAKE_UP_MHDR == buf[0])   &&
+                   (true == pending_trigs))
+                        goto loopb_trigger_exit;          /* Already indicated, so leave */
+
+                /* Setting an out-of-band indication, in case, the loopback doesn't work */
+                if(LPBK_NW_TEAR_MHDR == buf[0]) {
+                        if(false == mon_loop_flag)
+                                goto loopb_trigger_exit;  /* Already indicated, so leave */
+                        
+                        mon_loop_flag = false;
+                }
+
+                rv = net_ops->send_dest(loopb_net, buf, len, loopback_port,
+                                        ip_addr, sizeof(ip_addr));
+
+                if(rv == len)
                         pending_trigs = true;
         }
 
+ loopb_trigger_exit:
         return rv;
 }
 
@@ -171,7 +195,9 @@ static void do_net_close_tx(struct client_ctx *cl_ctx, bool due2err)
 
         cl_ctx->flags |= NETWORK_CLOSE_FLAG;
 
-        loopb_trigger();
+        loopb_trigger(lpbk_wake_up_msg, LPBK_DLEN);
+
+        return;
 }
 
 static i32 cl_ctx_send(struct client_ctx *cl_ctx, u8 *buf, u32 len)
@@ -235,19 +261,6 @@ i32 mqtt_vh_msg_send_locked(void *ctx_cl, u8 msg_type, enum mqtt_qos qos,
         return rv;
 }
 
-i32 mqtt_connack_send(void *ctx_cl, u8 *vh_buf)
-{
-        struct client_ctx *cl_ctx = (struct client_ctx *) ctx_cl;
-
-        i32 rv = vh_msg_send(cl_ctx, MQTT_CONNACK, MQTT_QOS0,
-                             true, (vh_buf[0] << 8) | vh_buf[1]);
-
-        if((rv > 0) && (0x00 != vh_buf[1]))
-                do_net_close_tx(cl_ctx, true);
-
-        return rv;
-}
-
 static
 i32 _mqtt_server_pub_dispatch(void *ctx_cl, struct mqtt_packet *mqp, bool dup)
 {
@@ -279,6 +292,23 @@ mqtt_server_pub_dispatch_locked(void *ctx_cl, struct mqtt_packet *mqp, bool dup)
         MUTEX_UNLOCK();
 
         return rv;
+}
+
+i32 mqtt_server_pause(void)
+{
+        return loopb_trigger(lpbk_nw_tear_msg, LPBK_DLEN);
+}
+
+i32 mqtt_server_pause_locked(void)
+{
+        i32 rv;
+
+        MUTEX_LOCKIN();
+        rv = mqtt_server_pause();
+        MUTEX_UNLOCK();
+
+        return rv;
+        
 }
 
 #define MQP_MAX_TOPICS      16
@@ -686,6 +716,10 @@ static u32 recv_hvec_load(i32 *recv_hvec, u32 size, struct client_ctx *list)
         return i;
 }
 
+/* Caution:   if the message type is 'MQTT_DISCONNECT', then the caller of this
+   routine mustn't use the cl_ctx post this invocation. In the current revision
+   of the implementation proc_disconn( ) destroys the cl_ctx.
+*/
 static bool process_recv(struct client_ctx *cl_ctx, struct mqtt_packet *mqp_raw)
 {
         u8 msg_type = mqp_raw->msg_type;
@@ -754,11 +788,20 @@ static void ka_sequence(u32 *secs2wait)
 
         while(NULL != cl_ctx) {
                 struct client_ctx *next = cl_ctx->next;
-                if(NEED_NET_CLOSE(cl_ctx) || !(cl_ctx->timeout > now_secs)) {
-                        bool due2err = false;
+                bool due2err = false, teardown = false;
+
+                if(NEED_NET_CLOSE(cl_ctx)) {
+                        teardown = true;
                         if(cl_ctx->flags & NW_CONN_ERROR_FLAG)
                                 due2err = true;
+                }
 
+                if(!(cl_ctx->timeout > now_secs)) {
+                        teardown = true;
+                        due2err = true;
+                }
+
+                if(teardown) {        
                         cl_ctx->flags &= ~(NW_CONN_ERROR_FLAG |
                                            NETWORK_CLOSE_FLAG);
 
@@ -840,17 +883,19 @@ i32 net_recv(i32 net, struct mqtt_packet *mqp, u32 wait_secs, bool *timed_out)
 
 static i32 proc_loopback_recv(i32 net)
 {
-        u8 buf[LOOP_DLEN];
+        u8 buf[LPBK_DLEN];
 
-        /* Thanks for waking-up the thread, but we do nothing in this */
-        i32 rv = net_ops->recv_from(net, buf, LOOP_DLEN, NULL, NULL, 0);
+        i32 rv = net_ops->recv_from(net, buf, LPBK_DLEN, NULL, NULL, 0);
         pending_trigs = false;
 
-        if(rv <= 0) {
+        if((rv <= 0) && (rv != LPBK_DLEN)) {
                 net_ops->close(net);
                 return MQP_ERR_LIBQUIT;
         }
 
+        if(LPBK_NW_TEAR_MHDR == buf[0])
+                mon_loop_flag = false;
+        
         return rv;
 }
 
@@ -930,22 +975,29 @@ static i32 net_hnds_mon_loop(u32 wait_secs)
 
                 r_hvec[n_hnds++] = -1; /* Mark end of the array of net handles */
 
-                n_hnds = net_ops->io_mon(recv_hvec, &send_hvec,
-                                         &rsvd_hvec, secs2wait);
+                /* Ideally, the server should be allowed to sleep until it has a
+                   packet to process. However, at times, the loopback handle may
+                   not be able to forward the required data to the server, thus
+                   using a shorter time-out                                    */
+                n_hnds = net_ops->io_mon(recv_hvec, &send_hvec, &rsvd_hvec,
+                                         MIN(secs2wait, wait_secs));
                 if(n_hnds < 0)
                         return MQP_ERR_LIBQUIT;
 
                 if(false == proc_recv_hnds_locked(recv_hvec, n_hnds, wait_secs))
                         return MQP_ERR_LIBQUIT;
 
-        } while(1);
+        } while(mon_loop_flag);
 
+        return 0;
 }
 
-i32 mqtt_server_run(u32 wait_secs)   // TBD break into two functions
+i32 mqtt_server_run(u32 wait_secs)
 {
+        struct client_ctx *cl_ctx;
+        _i32 rv;
 
-        USR_INFO("S: MQTT Server Run invoked 123....\n\r");
+        USR_INFO("S: MQTT Server Run invoked ....\n\r");
 
         if(NULL == net_ops)
                 return MQP_ERR_NET_OPS;
@@ -957,11 +1009,32 @@ i32 mqtt_server_run(u32 wait_secs)   // TBD break into two functions
                         return MQP_ERR_LIBQUIT;
         }
 
-        listen_net = net_ops->listen(0, listener_port, NULL);
-        if(-1 == listen_net)
-                return MQP_ERR_LIBQUIT;
+        listen_net = net_ops->listen(0, listener_port, nw_security);
+        if(-1 == listen_net) {
+                rv = MQP_ERR_LIBQUIT;
+                goto mqtt_server_run_exit;
+        }
 
-        return net_hnds_mon_loop(wait_secs);
+        rv = net_hnds_mon_loop(wait_secs);
+
+        /* Disengage / purge the references to the underlying netork layer */
+        cl_ctx = used_ctxs;
+        while(NULL != cl_ctx) {
+                struct client_ctx *next = cl_ctx->next;
+                do_net_close_rx(cl_ctx, false);
+                cl_ctx = next;
+        }
+
+        net_ops->close(listen_net); listen_net = -1;
+
+ mqtt_server_run_exit:
+        if(loopback_port && (-1 != loopb_net)) {
+                net_ops->close(loopb_net);  loopb_net  = -1;
+        }
+
+        mon_loop_flag = true;
+
+        return rv;
 }
 
 i32 mqtt_server_register_net_svc(const struct device_net_services *net)
@@ -998,8 +1071,14 @@ i32 mqtt_server_lib_init(const struct mqtt_server_lib_cfg *lib_cfg,
         debug_printf  = lib_cfg->debug_printf;
 
         usr_cbs = &usr_obj;
-
         memcpy(usr_cbs, msg_cbs, sizeof(struct mqtt_server_msg_cbs));
+
+        nw_security = NULL;
+        if(NULL != lib_cfg->nw_security) {
+                nw_security = &nw_sec_obj;
+                memcpy(nw_security, lib_cfg->nw_security,
+                       sizeof(struct secure_conn));
+        }
 
         mqp_buffer_attach(&rx_mqp, rxb, MQP_SERVER_RX_LEN, 0);
 

@@ -99,9 +99,11 @@ _i16 sl_Start(const void* pIfHdl, _i8*  pDevName, const P_INIT_CALLBACK pInitCal
     _u8 ObjIdx = MAX_CONCURRENT_ACTIONS;
     InitComplete_t  AsyncRsp;
 
-    /* verify no erorr handling in progress. if in progress than
-    ignore the API execution and return immediately with an error */
-    VERIFY_NO_ERROR_HANDLING_IN_PROGRESS();
+	if ( g_bDeviceRestartIsRequired == (_u8)TRUE) 
+	{
+		return SL_API_ABORTED; 
+	}
+	
     /* Perform any preprocessing before enable networking services */
 #ifdef sl_DeviceEnablePreamble
     sl_DeviceEnablePreamble();
@@ -151,7 +153,7 @@ _i16 sl_Start(const void* pIfHdl, _i8*  pDevName, const P_INIT_CALLBACK pInitCal
                 return SL_API_ABORTED;
             }
 #endif            
-
+			 SL_SET_DEVICE_STARTED;
 
             /* release Pool Object */
             _SlDrvReleasePoolObj(g_pCB->FunctionParams.AsyncExt.ActionIndex);
@@ -190,6 +192,7 @@ _SlReturnVal_t _sl_HandleAsync_InitComplete(void *pVoidBuf)
    
     if(g_pCB->pInitCallback)
     {
+		SL_SET_DEVICE_STARTED;
         _SlDrvReleasePoolObj(g_pCB->FunctionParams.AsyncExt.ActionIndex);
     }
 
@@ -281,7 +284,15 @@ _i16 sl_Stop(const _u16 timeout)
     }
 
     sl_IfRegIntHdlr(NULL, NULL);
-    sl_DeviceDisable();
+
+#ifdef sl_DeviceDisablePreamble
+	if (timeout == 0)
+	{
+		sl_DeviceDisablePreamble();
+	}
+#endif
+
+	sl_DeviceDisable();
     RetVal = sl_IfClose(g_pCB->FD);
 
     (void)_SlDrvDriverCBDeinit();

@@ -57,6 +57,7 @@
 #include <hw_ints.h>
 #include <interrupt.h>
 #include <udma.h>
+#include <timer.h>
 #include <utils.h>
 
 //OSLib includes
@@ -803,6 +804,9 @@ void NwpPowerOn(void)
     HWREG(0x4402E16C) &= 0xFFFFFFFD;
 #endif
 
+    /* Clear host IRQ indication */
+    HWREG(0x400F7094) = 1;
+
     //NWP Wakeup
     HWREG(0x44025118) = 1;
 #ifndef DISABLE_DEBUGGER_RECONNECT
@@ -896,6 +900,30 @@ void NwpPowerOff_WithNwpLpdsPoll(void)
 #endif
 }
 
+/*!
+    \brief      This API additionally ensures that the NWP would shut down gracefully
+                before calling sl_Stop with 0 timeout. It assert the Out of band interrupt,
+				from APPS to NWP, in order that the NWP would stop it's activities and release 
+				resources gracefully.
+
+    \sa         sl_DeviceDisable
+	\sa			sl_Stop
+
+    \note       belongs to \ref ported_sec
+*/
+void NwpPrePowerOffTimout0(void)
+{
+
+	 HWREG(0x400F70B8) = 1;   /* APPs to NWP interrupt */
+
+	 /* 20usec delay */
+	 UtilsDelay(8000/5);
+
+ 	/* Clear APPs to NWP interrupt */
+ 	 HWREG(0x400F70B0) = 1;
+
+}
+
 
 /*!
  	 \brief		Configures the uDMA channel
@@ -964,3 +992,43 @@ void cc_SetupTransfer(
     MAP_uDMAChannelEnable(ulChannel);
 
 }
+
+#ifdef sl_GetTimestamp
+#include "timer.h"
+/*!
+  \brief   configures and starts the timer for simplelink time-stamping feature     
+  
+  \note    This API uses TIMERA2 module, hence should not be used by the application
+*/
+void simplelink_timerA2_start()
+{
+    //
+    // Configuring the timerA2
+    //
+    MAP_PRCMPeripheralClkEnable(PRCM_TIMERA2, PRCM_RUN_MODE_CLK);
+    MAP_PRCMPeripheralReset(PRCM_TIMERA2);
+    MAP_TimerConfigure(TIMERA2_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerPrescaleSet(TIMERA2_BASE, TIMER_A,0);
+
+    // configure the timer counter load value to max 32-bit value
+    MAP_TimerLoadSet(TIMERA2_BASE, TIMER_A, 0xFFFFFFFF);
+    //
+    // Enable the GPT
+    //
+    MAP_TimerEnable(TIMERA2_BASE, TIMER_A);
+}
+
+/*!
+  \brief   returns the time stamp value    
+  
+  \note    This API uses TIMERA2 module, hence should not be used by the application
+*/
+unsigned long TimerGetCurrentTimestamp()
+{
+	if(MAP_PRCMPeripheralStatusGet(PRCM_TIMERA2) == false)
+	{
+		simplelink_timerA2_start();
+	}
+	return (0xFFFFFFFF - MAP_TimerValueGet(TIMERA2_BASE, TIMER_A));
+}
+#endif

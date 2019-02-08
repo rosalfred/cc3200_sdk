@@ -44,7 +44,7 @@
 
 /* Timeouts for the sync objects  */
 #ifndef SL_DRIVER_TIMEOUT_SHORT
-#define SL_DRIVER_TIMEOUT_SHORT        (1000) /* msec units */
+#define SL_DRIVER_TIMEOUT_SHORT        (10000) /* msec units */
 #endif
 #ifndef SL_DRIVER_TIMEOUT_LONG
 #define SL_DRIVER_TIMEOUT_LONG         (65535) /* msec units */
@@ -70,6 +70,14 @@
 #define SL_DRV_OBJ_LOCK_FOREVER(pObj)        (void)_SlDrvObjLockWaitForever(pObj);
 #define SL_DRV_SYNC_OBJ_SIGNAL(pObj)         (void)_SlDrvSyncObjSignal(pObj);
 #define SL_DRV_SYNC_OBJ_CLEAR(pObj)          (void)sl_SyncObjWait(pObj,SL_OS_NO_WAIT);
+
+extern _u16  g_SlDeviceStatus;
+
+#define SL_SET_DEVICE_STARTED            (g_SlDeviceStatus |= _SL_DRV_STATUS_BIT_DEVICE_STARTED) /* bit 9 indicates device is started */
+#define SL_UNSET_DEVICE_STARTED          (g_SlDeviceStatus &= (~_SL_DRV_STATUS_BIT_DEVICE_STARTED)) /* bit 9 indicates device is started */
+#define SL_IS_COMMAND_ALLOWED		     ( (g_SlDeviceStatus & _SL_DRV_STATUS_BIT_DEVICE_STARTED) == _SL_DRV_STATUS_BIT_DEVICE_STARTED)
+
+
 
 
 #ifdef SL_TINY_EXT
@@ -260,9 +268,8 @@ typedef struct
     _u8                     SocketNonBlocking;
 	_u8                     SocketTXFailure;
     /* for stack reduction the parameters are globals */
-    _SlFunctionParams_t              FunctionParams;
-
-    _u8 ActionIndex;
+    _SlFunctionParams_t     FunctionParams;
+    _u8						ActionIndex;
 }_SlDriverCb_t;
 
 extern _volatile _u8     RxIrqCnt;

@@ -17,7 +17,7 @@
 #include "server_core.h"
 #include "client_mgmt.h"
 #include "server_util.h"
-#include "cc31xx_sl_net.h"
+#include "cc32xx_sl_net.h"
 #include "osi.h"
 
 
@@ -45,7 +45,8 @@ struct mqtt_server_lib_cfg server_cfg = {
    &MutexLockObj,
    mutex_lock,
    mutex_unlock,
-   NULL             /*Debug print*/
+   NULL,             /*Debug print*/
+   true
 };
 
 struct mqtt_server_app_cfg app_config = {
@@ -58,7 +59,7 @@ _u32 g_srvr_wait_secs,g_srvr_task_priority;
 struct device_net_services net_ops = {comm_open,tcp_send,tcp_recv,
                                 send_dest,recv_from,comm_close,
                                 tcp_listen,tcp_accept,tcp_select,rtc_secs};
-void VMqttServerRunTask(void *pvParams);
+static void VMqttServerRunTask(void *pvParams);
 
 SlMqttServerCbs_t cbs_obj,*cbs_ptr=NULL;
 struct ctrl_struct{
@@ -78,8 +79,8 @@ u16 sl_server_connect_cb (_const struct utf8_string *clientId,
 }
 
 void sl_server_publish_cb(_const struct utf8_string *topic,
-                _const u8 *payload, u32 pay_len,
-                bool dup, u8 qos, bool retain)
+                          _const u8 *payload, u32 pay_len,
+                          bool dup, u8 qos, bool retain)
 {
         cbs_obj.sl_ExtLib_MqttRecv((_const char*)MQ_CONN_UTF8_BUF(topic),
                MQ_CONN_UTF8_LEN(topic), payload, pay_len, dup, qos, retain);
@@ -126,8 +127,23 @@ struct mqtt_server_app_cbs server_appcallbacks =
         sl_server_disconn_cb
 };
 
+static volatile enum _e_SlMqttServerState {
+
+	ePaused     = 1,
+	eGoToPaused,
+	eActive,
+	eGoToActive,
+	eErrors
+
+} serverState = ePaused;
+
+static volatile bool initFn_awaits = true; /* Flag used by init function */
+
+static _SlSyncObj_t serverSem, *pSemObj;
+static _SlSyncObj_t rxTaskSem, *pSemTsk;
+
 i32 sl_ExtLib_MqttServerInit(_const SlMqttServerCfg_t  *cfg,
-                               _const SlMqttServerCbs_t  *app_cbs)
+                             _const SlMqttServerCbs_t  *app_cbs)
 {
     i32 ret;
     
@@ -159,16 +175,112 @@ i32 sl_ExtLib_MqttServerInit(_const SlMqttServerCfg_t  *cfg,
     
     /* registering the apps callbacks */
     app_hndl.plugin_hndl = mqtt_server_app_register(&server_appcallbacks, "temp");
-    
+
+    initFn_awaits = true;
+
+    pSemObj = &serverSem;
+    sl_SyncObjCreate(pSemObj, "SlMqttServerInitObj");
+    sl_SyncObjWait(pSemObj, SL_OS_NO_WAIT); /* Make Sem = 0 */
+
+    pSemTsk = &rxTaskSem;      /* Semaphore for RX LIB Task */
+    sl_SyncObjCreate(pSemTsk, "SlMqttServerTaskSem");
+    sl_SyncObjWait(pSemTsk, SL_OS_NO_WAIT); /* Make Sem = 0 */
+
     /* start the Server Run task */
-    osi_TaskCreate( VMqttServerRunTask, (_const signed char*) "MQTTServerRun", 2048, NULL, g_srvr_task_priority, NULL );
+    osi_TaskCreate( VMqttServerRunTask, (_const signed char*) "MQTTServerRun",
+                    2048, NULL, g_srvr_task_priority, NULL );
+
+    /* Give a chance to the newly created task to run - let's do short wait */
+    osi_SyncObjWait(pSemObj, SL_OS_WAIT_FOREVER);
+
     return ret;
 }
 
-void VMqttServerRunTask(void *pvParams)
+static inline void _sl_MqttServerStateSet(enum _e_SlMqttServerState newState)
 {
-    mqtt_server_run(g_srvr_wait_secs);
+    unsigned long flags = osi_EnterCritical();
+    serverState = newState;
+    osi_ExitCritical(flags);
+}
+
+static inline enum _e_SlMqttServerState _sl_MqttServerStateGet()
+{
+    enum _e_SlMqttServerState state;
+
+    unsigned long flags = osi_EnterCritical();
+    state = serverState;
+    osi_ExitCritical(flags);
+
+    return state;
+}
+
+static void VMqttServerRunTask(void *pvParams)
+{
+    while(ePaused == _sl_MqttServerStateGet()) {
+        if(true == initFn_awaits) {
+            initFn_awaits = false;
+            osi_SyncObjSignal(pSemObj); /* Declare: I am all set to run */
+        }
+
+        osi_SyncObjWait(pSemTsk, SL_OS_WAIT_FOREVER); /* Park task here */
+        _sl_MqttServerStateSet(eActive);    /* Parking over - get going */
+        if(0 != mqtt_server_run(g_srvr_wait_secs))
+            _sl_MqttServerStateSet(eErrors);
+        else
+            _sl_MqttServerStateSet(ePaused);
+    }
+
+    osi_SyncObjWait(pSemTsk, SL_OS_WAIT_FOREVER);
+    return;
+}
+
+_i32 sl_ExtLib_MqttServerActivate(void)
+{
+    _i32 rv = 0;
+
+    unsigned long flags = osi_EnterCritical();
+
+    if(ePaused == serverState) {
+        serverState = eGoToActive;
+		osi_SyncObjSignal(pSemTsk);    /* Activate: Get the task to run */
+    } else
+        rv = -1;
+
+    osi_ExitCritical(flags);
+
+    if(0 == rv) {
+                osi_Sleep(20);
+        rv = (eActive == _sl_MqttServerStateGet()) ? 0 : -1;
+    }
+
+    return rv;
 }
 
 
+_i32 sl_ExtLib_MqttServerPause(void)
+{
+    _i32 rv = 0;
+
+    unsigned long flags = osi_EnterCritical();
+
+    if(eActive == serverState)
+        serverState = eGoToPaused;
+    else
+        rv = -1;
+
+    osi_ExitCritical(flags);
+
+    if(0 == rv) {
+        enum _e_SlMqttServerState state;
+
+        mqtt_server_pause_locked();
+
+        while(eGoToPaused == (state = _sl_MqttServerStateGet()))
+            osi_Sleep(10);
+
+        rv = (ePaused == state) ? 0 : -1;
+    }
+
+    return rv;
+}
 

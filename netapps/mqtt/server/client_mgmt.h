@@ -30,7 +30,12 @@ void cl_sub_count_add(void *usr_cl);
 
 void cl_sub_count_del(void *usr_cl);
 
-bool cl_mgmt_qos2_pub_rx_update(void *usr_cl, u16 msg_id);
+/* Record QOS2 msg ID from a client. Return values:
+   1: this is a new PUB message (ID), msg id has been recorded.
+   0: old ID, the msg ID is already recorded ("only once" QOS2)
+  -1: error in recording the (QOS2) message ID from the client
+*/
+i32 cl_mgmt_qos2_pub_rx_update(void *usr_cl, u16 msg_id);
 
 void cl_pub_dispatch(u32 cl_map, struct mqtt_packet *mqp);
 

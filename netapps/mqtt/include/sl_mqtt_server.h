@@ -208,17 +208,17 @@ extern "C"
         /** Secure Socket Parameters to open a secure connection */
         typedef struct {
 
-                #define SL_MQTT_SRVR_NETCONN_IP6  0x01  /**< Assert for IPv6 connection, otherwise  IPv4 */
-                #define SL_MQTT_SRVR_NETCONN_URL  0x02  /**< Server address is an URL and not IP address */
-                #define SL_MQTT_SRVR_NETCONN_SEC  0x04  /**< Connection to server  must  be secure (TLS) */
+                #define SL_MQTT_SRVR_NETCONN_IP6  0x04  /**< Assert for IPv6 connection, otherwise  IPv4 */
+                #define SL_MQTT_SRVR_NETCONN_URL  0x08  /**< Server address is an URL and not IP address */
+                #define SL_MQTT_SRVR_NETCONN_SEC  0x10  /**< Connection to server  must  be secure (TLS) */
 
                 _u32         netconn_flags; /**< Enumerate connection type  */
-                _const char          *server_addr;   /**< Server Address: URL or IP  */
-                _u16       port_number;   /**< Port number of MQTT server */
-                _u8        method;        /**< Method to tcp secured socket */
+                _const char *server_addr;   /**< Server Address: URL or IP  */
+                _u16         port_number;   /**< Port number of MQTT server */
+                _u8          method;        /**< Method to tcp secured socket */
                 _u32         cipher;        /**< Cipher to tcp secured socket */
                 _u32         n_files;       /**< Number of files for secure transfer */
-                char * _const        *secure_files; /*SL needs 4 files*/
+                char * _const *secure_files; /*SL needs 4 files*/
                 
         } SlMqttServerParams_t;
         
@@ -243,6 +243,34 @@ extern "C"
         */
         _i32 sl_ExtLib_MqttServerInit(_const SlMqttServerCfg_t *cfg,
                                        _const SlMqttServerCbs_t *cbs);
+
+        /** Activate the Server.
+            Engage or acquire the requisite network stack resources (such as the
+            listen socket) in order to be ready to await and handle the incoming
+            network connections from the remote clients.
+
+            The application must invoke this API() either after initializing the
+            server or after pausing the server.
+
+            \return Success (0) or Failure (-1)
+        */
+        _i32 sl_ExtLib_MqttServerActivate(void);
+
+        /** Pause the Server.
+            Close all the active MQTT connections with the clients and relinqush
+            all the network stack resources (such as data and listen sockets).
+
+            If the underlying network stack has to be reconfigured or restarted,
+            then the application must use this API() to disengage the network
+            stack from the server.
+
+            The server will continue to maintain the data for the retained topics
+            and the sesions that were set-up by the clients with cleanSession 
+            parameter as 0.
+            
+            \return Success (0) or Failure (-1)
+        */
+        _i32 sl_ExtLib_MqttServerPause(void);
 
         /** Enroll a topic to receive data
             App can enroll a topic of interest and the SL layer will forward to the app any

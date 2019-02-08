@@ -301,7 +301,7 @@ _i16 sl_WlanPolicyGet(const _u8 Type ,_u8 Policy,_u8 *pVal,_u8 *pValLen)
 
     _SlDrvResetCmdExt(&CmdExt);
     CmdExt.RxPayloadLen = (_i16)(*pValLen);
-    CmdExt.pRxPayload = pVal;
+    CmdExt.pRxPayload = &pVal[0];
 
     Msg.Cmd.PolicyType = Type;
     Msg.Cmd.PolicyOption = Policy;
@@ -316,12 +316,22 @@ _i16 sl_WlanPolicyGet(const _u8 Type ,_u8 Policy,_u8 *pVal,_u8 *pValLen)
     else
     {
         /*  no pointer valus, fill the results into _i8 */
-        *pValLen = (_u8)CmdExt.ActualRxPayloadLen;
         if( 0 == CmdExt.ActualRxPayloadLen )
         {
-            *pValLen = 1;
-            pVal[0] = Msg.Rsp.PolicyOption;
+			pVal[0] = Msg.Rsp.PolicyOption;
+            *pValLen = 1;     
         }
+		/* user buffer also holds a place for the current policy */ 
+		else if ((*pValLen > 0) && (*pValLen > CmdExt.ActualRxPayloadLen))
+		{
+			pVal[*pValLen - sizeof(_u32)] = (_u32)Msg.Rsp.PolicyOption; /* the last _u32 in the user buffer holds the policy */
+			*pValLen = (_u8)CmdExt.ActualRxPayloadLen + 4;
+		}
+		else 
+		{
+			*pValLen = CmdExt.ActualRxPayloadLen;
+		}
+		
     }
     return (_i16)SL_OS_RET_CODE_OK;
 }

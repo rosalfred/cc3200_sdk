@@ -60,6 +60,118 @@ _i32 OtaClient_ConnectServer(void *pvOtaClient, OtaOptServerInfo_t *pOtaServerIn
     return OTA_STATUS_OK;
 }
 
+#ifdef OTA_DROPBOX_V2
+
+/* Dropbox V2 requests */
+#define OTA_SERVER_REST_REQ_DIR         "/2/files/list_folder"            /* returns files/folder list */
+#define OTA_SERVER_REST_REQ_FILE_URL    "/2/files/get_temporary_link"     /* returns A url that serves the media directly */
+#define OTA_SERVER_REST_HDR             "Authorization: Bearer "
+
+/* dropbox V2 response metadata names to parse */
+#define JSON_FILE_SIZE      "size"
+#define JSON_FILE_NAME      "path_display"
+#define JSON_FILE_URL       "link"
+
+_i16 HttpClient_SendReq(_i16 SockId, _u8 *pHttpReqBuf, _u8 *pReqMethod, _u8 *pServerName, _u8 *pUriPrefix, _u8 *pUriVal, _u8 *pHdrName, _u8 *pHdrVal)
+{
+    _i16 Len;
+
+    /* start with method GET/POST/PUT */
+    strcpy((char *)pHttpReqBuf, (const char *)pReqMethod);
+
+    /* fill uri_req_prefix */
+    if (pUriPrefix && strlen((const char *)pUriPrefix))
+    {
+        strcat((char *)pHttpReqBuf, (const char *)pUriPrefix);
+    }
+    /* fill request URI */
+    if (pUriVal && strlen((const char *)pUriVal))
+    {
+        strcat((char *)pHttpReqBuf, (const char *)pUriVal);
+    }
+
+    /* fill domain */
+    strcat((char *)pHttpReqBuf, " HTTP/1.1\r\nhost: ");
+    strcat((char *)pHttpReqBuf, (const char *)pServerName);
+    strcat((char *)pHttpReqBuf, "\r\n");
+
+    /* fill access_token */
+    if (pHdrName && strlen((const char *)pHdrName))
+    {
+        strcat((char *)pHttpReqBuf, (const char *)pHdrName);
+        strcat((char *)pHttpReqBuf, (const char *)pHdrVal);
+        strcat((char *)pHttpReqBuf, "\r\n");
+    }
+
+    strcat((char *)pHttpReqBuf, "\r\n\0");
+
+
+    /* Send the prepared request */
+    Len = sl_Send(SockId, pHttpReqBuf, (_i16)strlen((const char *)pHttpReqBuf), 0);
+
+    return Len;
+}
+
+/* DROPBOX API V2 - build list_folder, example
+    POST /2/files/list_folder HTTP/1.1
+    Host: api.dropboxapi.com
+    Authorization: Bearer -----------AAAAAAAAABZFti2KbmMpg1sayxzcywgzWjxOzAnWfloOb4jb-3SIN
+    Content-Type: Application/Json
+    Content-Length: 23
+
+    {"path": "/OTA_CC3120"}
+*/
+
+_i16  CdnDropboxV2_SendReqDir(_i16 SockId, _u8 *pSendBuf, _u8 *pServerName, _u8 *pVendorDir, _u8 *pVendorToken)
+{
+    _u8 ReqDirCmdBuf[200];
+
+    /* Headers */
+    strcpy((char *)ReqDirCmdBuf, (const char *)pVendorToken);
+    strcat((char *)ReqDirCmdBuf, "\r\nContent-Type: Application/Json\r\nContent-Length:  ");
+    ltoa(13 /* {"path": "/"} */ + strlen((const char *)pVendorDir), (char *)&ReqDirCmdBuf[strlen((const char *)ReqDirCmdBuf)]);
+    strcat((char *)ReqDirCmdBuf, "\r\n\r\n");
+
+    /* Data */
+    strcat((char *)ReqDirCmdBuf, "{\"path\": \"/");
+    strcat((char *)ReqDirCmdBuf, (const char *)pVendorDir);
+    strcat((char *)ReqDirCmdBuf, "\"}");
+
+    Report("CdnDropbox_SendReqDir: uri=%s\r\n", OTA_SERVER_REST_REQ_DIR);
+    return HttpClient_SendReq (SockId, pSendBuf, (_u8 *)"POST ", pServerName, (_u8 *)OTA_SERVER_REST_REQ_DIR , ""/*pVendorDir*/, (_u8 *)OTA_SERVER_REST_HDR, ReqDirCmdBuf/*pVendorToken*/);
+}
+
+/* DROPBOX V2 API - build get_temporary_link, example
+    POST /2/files/get_temporary_link HTTP/1.1
+    Host: api.dropboxapi.com
+    Authorization: Bearer -----------AAAAAAAAABZFti2KbmMpg1sayxzcywgzWjxOzAnWfloOb4jb-3SIN
+    Content-Type: Application/Json
+    Content-Length: 43
+
+    {"path": "/ota_r2/2016052417_cc3220rs.tar"}
+*/
+_i16  CdnDropboxV2_SendReqFileUrl(_i16 SockId, _u8 *pSendBuf, _u8 *pServerName, _u8 *pFileName, _u8 *pVendorToken)
+{
+    _u8 ReqDirCmdBuf[200];
+
+    /* Headers */
+    strcpy((char *)ReqDirCmdBuf, (const char *)pVendorToken);
+    strcat((char *)ReqDirCmdBuf, "\r\nContent-Type: Application/Json\r\nContent-Length:  ");
+    ltoa(12 /* {"path": ""} */ + strlen((const char *)pFileName), (char *)&ReqDirCmdBuf[strlen((const char *)ReqDirCmdBuf)]);
+    strcat((char *)ReqDirCmdBuf, "\r\n\r\n");
+
+    /* Data */
+    strcat((char *)ReqDirCmdBuf, "{\"path\": \"");
+    strcat((char *)ReqDirCmdBuf, (const char *)pFileName);
+    strcat((char *)ReqDirCmdBuf, "\"}");
+
+    Report("CdnDropbox_SendReqFileUrl: uri=%s\r\n", OTA_SERVER_REST_REQ_FILE_URL);
+    return HttpClient_SendReq(SockId, pSendBuf, (_u8 *)"POST ", pServerName, (_u8 *)OTA_SERVER_REST_REQ_FILE_URL , "" /*pFileName*/, (_u8 *)OTA_SERVER_REST_HDR, ReqDirCmdBuf/*pVendorToken*/);
+}
+
+
+#endif
+
 _i32 OtaClient_UpdateCheck(void *pvOtaClient, _u8 *pVendorStr)
 {
     OtaClient_t *pOtaClient = (OtaClient_t *)pvOtaClient;
@@ -73,13 +185,17 @@ _i32 OtaClient_UpdateCheck(void *pvOtaClient, _u8 *pVendorStr)
     pOtaClient->pVendorStr = pVendorStr;
     Report("OtaClient_UpdateCheck: call http_build_request %s\r\n", pOtaServerInfo->rest_update_chk);
 
-#ifdef TI_OTA_SERVER
-    http_build_request (send_buf, "GET ", pOtaServerInfo->server_domain, pOtaServerInfo->rest_update_chk, NULL, NULL, NULL);
+#ifdef OTA_DROPBOX_V2
+    len = CdnDropboxV2_SendReqDir (pOtaClient->serverSockId, send_buf, pOtaServerInfo->server_domain, pOtaClient->pVendorStr, pOtaServerInfo->rest_hdr_val);
 #else
-    http_build_request (send_buf, "GET ", pOtaServerInfo->server_domain, pOtaServerInfo->rest_update_chk , pOtaClient->pVendorStr, pOtaServerInfo->rest_hdr, pOtaServerInfo->rest_hdr_val);
-#endif
+	#ifdef TI_OTA_SERVER
+    http_build_request (send_buf, "GET ", pOtaServerInfo->server_domain, pOtaServerInfo->rest_update_chk, NULL, NULL, NULL);
+	#else
+	http_build_request (send_buf, "GET ", pOtaServerInfo->server_domain, pOtaServerInfo->rest_update_chk , pOtaClient->pVendorStr, pOtaServerInfo->rest_hdr, pOtaServerInfo->rest_hdr_val);
+	#endif
 
     len = sl_Send(pOtaClient->serverSockId, send_buf, (_i16)strlen((const char *)send_buf), 0);
+#endif
     if (len <= 0)
     {
         Report("OtaClient_UpdateCheck: ERROR metadata sl_Send status=%ld\r\n", len);
@@ -169,7 +285,9 @@ _i32 OtaClient_ResourceMetadata(void *pvOtaClient, _u8 *resource_file_name, OtaF
         Report("OtaClient_ResourceMetadata: Error on OtaClient_ResourceNameConvert, status=%ld\r\n", status);
         return OTA_STATUS_ERROR;
     }
-
+#ifdef OTA_DROPBOX_V2
+    len = CdnDropboxV2_SendReqFileUrl(pOtaClient->serverSockId, send_buf, pOtaServerInfo->server_domain, resource_file_name, pOtaServerInfo->rest_hdr_val);
+#else
 #ifdef TI_OTA_SERVER
     http_build_request (send_buf, "GET ",  pOtaServerInfo->server_domain, pOtaServerInfo->rest_rsrc_metadata, NULL,             , pOtaServerInfo->rest_hdr, pOtaServerInfo->rest_hdr_val);
 #else
@@ -177,6 +295,7 @@ _i32 OtaClient_ResourceMetadata(void *pvOtaClient, _u8 *resource_file_name, OtaF
 #endif
 
     len = sl_Send(pOtaClient->serverSockId, send_buf, (_i16)strlen((const char *)send_buf), 0);
+#endif
     if (len <= 0)
     {
         Report("OtaClient_ResourceMetadata: Error media sl_Send status=%ld\r\n", len);

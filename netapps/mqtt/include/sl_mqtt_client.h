@@ -55,6 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <stdbool.h>
 #include "simplelink.h"
+#include "mqtt_common.h"
 
 #ifndef __SL_MQTT_H__
 #define __SL_MQTT_H__
@@ -67,7 +68,6 @@ extern "C"
           \mainpage SimpleLink MQTT Client Layer
           
           * \section intro_sec Introduction
-
           The SimpleLink MQTT Client Layer provides an easy-to-use API(s) to enable
           constrained and deeply embedded microcontroller based products to interact
           with cloud or network based server for telemetery. The users of SL MQTT
@@ -75,12 +75,10 @@ extern "C"
           would find them suitable for varied deployments of MQTT subscribers and / or
           publishers.
 
-          The following figure outlines the composition of the SL MQTT Client Layer.
-
-          * \image html ./sl_mqtt_client_view.png
+          The following figure outlines the composition of the SL MQTT Client Layer
+		  * \image html ./sl_mqtt_client_view.png
           
           * \section descrypt_sec Description
-
           The SL MQTT Client Layer, in addition to providing services to the application,
           encompasses a RTOS task to handle the incoming messages from the server. Such
           a dedicated context to process the messages from the server facilitates the
@@ -131,6 +129,18 @@ extern "C"
         /** @defgroup sl_mqtt_cl_evt SL MQTT Client Events
             @{ 
         */
+#define SL_MQTT_ERR_NETWORK     MQP_ERR_NETWORK  /**< Problem in network (sock err) */
+#define SL_MQTT_ERR_TIMEOUT     MQP_ERR_TIMEOUT  /**< Net transaction has timed out */
+#define SL_MQTT_ERR_NET_OPS     MQP_ERR_NET_OPS  /**< Platform Net Ops un-available */
+#define SL_MQTT_ERR_FNPARAM     MQP_ERR_FNPARAM  /**< Invalid parameter(s) provided */
+#define SL_MQTT_ERR_PKT_AVL     MQP_ERR_PKT_AVL  /**< No pkts are available in pool */
+#define SL_MQTT_ERR_PKT_LEN     MQP_ERR_PKT_LEN  /**< Inadequate free buffer in pkt */
+#define SL_MQTT_ERR_NOTCONN     MQP_ERR_NOTCONN  /**< Lib isn't CONNECTED to server */
+#define SL_MQTT_ERR_BADCALL     MQP_ERR_BADCALL  /**< Irrelevant call for LIB state */
+#define SL_MQTT_ERR_CONTENT     MQP_ERR_CONTENT  /**< MSG / Data content has errors */
+#define SL_MQTT_ERR_LIBQUIT     MQP_ERR_LIBQUIT  /**< Needs reboot library has quit */
+#define SL_MQTT_ERR_REMLSTN     MQP_ERR_REMLSTN  /**< No remote listener for socket */
+
 #define SL_MQTT_CL_EVT_PUBACK   0x04  /**< PUBACK has been received from the server */
 #define SL_MQTT_CL_EVT_PUBCOMP  0x07  /**< PUBCOMP has been received from the server */
 #define SL_MQTT_CL_EVT_SUBACK   0x09  /**< SUBACK has been received from the server */
@@ -173,7 +183,7 @@ extern "C"
                 */
                 void (*sl_ExtLib_MqttRecv)(void *app_hndl, const char *topstr, _i32 toplen,
                                             const void *payload, _i32 pay_len,
-                                            bool dup, unsigned char qos,
+                                            bool dup, _u8 qos,
                                             bool retain);
                 
                 /** Indication of event either from the server or implementation generated.
@@ -193,7 +203,7 @@ extern "C"
                     \note
                 */
                 void (*sl_ExtLib_MqttEvent)(void *app_hndl, _i32 evt, const void *buf, 
-                                             _u32 len);
+                                            _u32 len);
 
                 /** Notifies the client app about the termination of MQTT connection.
                     After servicing this callback, the client-app can destroy associated
@@ -210,7 +220,7 @@ extern "C"
 
                 const char        *will_topic;   /**< Will Topic    */
                 const char        *will_msg;     /**< Will message  */
-                char      will_qos;     /**< Will Qos      */
+                _u8                will_qos;     /**< Will Qos      */
                 bool               retain;       /**< Retain Flag   */
                          
         } SlMqttWill_t;
@@ -238,12 +248,19 @@ extern "C"
         */
         typedef struct {
                 _u32         netconn_flags; /**< Enumerate connection type  */
-                const char          *server_addr;   /**< Server Address: URL or IP  */
-                _u16       port_number;   /**< Port number of MQTT server */
-                char        method;        /**< Method to tcp secured socket */
+                const char  *server_addr;   /**< Server Address: URL or IP  */
+                _u16         port_number;   /**< Port number of MQTT server */
+                char         method;        /**< Method to tcp secured socket */
                 _u32         cipher;        /**< Cipher to tcp secured socket */
                 _u32         n_files;       /**< Number of files for secure transfer */
-                char * const        *secure_files;  /* SL needs 4 files*/
+                char* const *secure_files;  /* SL needs 4 files*/
+
+                /** Secure tcp socket: if not set to NULL, then check for this
+                    name in the remote server's certificate. */
+                const char  *domain_name;
+                /** Is the certificate authority (ca) of the remote server listed
+                    in the vault (i.e. certificate store) maitained by device? */
+                bool         dev_list_ca;
 
         } SlMqttServer_t;
 
@@ -294,8 +311,8 @@ extern "C"
             \param[in] app refers to the application callback to be returned on callback
         */
         void *sl_ExtLib_MqttClientCtxCreate(const SlMqttClientCtxCfg_t *ctx_cfg,
-                                              const SlMqttClientCbs_t *msg_cbs,
-                                              void *app_hndl);
+                                            const SlMqttClientCbs_t *msg_cbs,
+                                            void *app_hndl);
 
         /** Deletes the specified client context.
 
@@ -330,7 +347,7 @@ extern "C"
         */
         _i32 sl_ExtLib_MqttClientSet(void *cli_ctx, _i32 param, const void *value, _u32 len);
         
-        /*\brief None defined at the moment
+        /** \brief None defined at the moment
         */
         _i32 sl_ExtLib_MqttClientGet(void *cli_ctx, _i32 param, void *value, _u32 len);
   
@@ -426,16 +443,16 @@ extern "C"
         */
         _i32 sl_ExtLib_MqttClientSend(void *cli_ctx, const char *topic,
                                       const void *data, _i32 len, 
-                                      char qos, bool retain);
+                                      _u8 qos, bool retain);
         
         /** PUBLISH a named message to the server - wrapper function.
         */
         static inline _i32 sl_ExtLib_MqttClientPub(void *cli_ctx, const char *topic,
-                                      const void *data, _i32 len,
-                                      char qos, bool retain)
+                                                   const void *data, _i32 len,
+                                                   _u8 qos, bool retain)
         {
                 return sl_ExtLib_MqttClientSend(cli_ctx, topic, data, len,
-                                          qos, retain);
+                                                qos, retain);
         }
 
         /** @} */ /* End Client API */

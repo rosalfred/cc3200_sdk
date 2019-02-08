@@ -1,5 +1,8 @@
 var modules =
 [
+    [ "Configuration - Capabilities Set", "group__configuration__capabilities.html", null ],
+    [ "Configuration - Device Enable/Disable", "group__configuration__enable__device.html", null ],
+    [ "Configuration - Communication Interface", "group__configuration__interface.html", "group__configuration__interface" ],
     [ "Device", "group__device.html", "group__device" ],
     [ "FileSystem", "group___file_system.html", "group___file_system" ],
     [ "Netapp", "group__netapp.html", "group__netapp" ],

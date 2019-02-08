@@ -527,6 +527,28 @@ typedef struct
     sl_protocol_InfoElement_t   ie;
 } sl_protocol_WlanSetInfoElement_t;
 
+typedef struct
+{
+    _u16        Reserved;
+    _u16        Reserved2;
+    _u16        MaxSleepTimeMs;   /* max sleep time in mSec For setting Long Sleep Interval policy use */
+    _u16        Reserved3;
+	_u32        PmPolicy;
+} SlWlanGetPmPolicyParams_t;
+
+typedef struct
+{
+    _u16        Reserved;
+    _u16        Reserved2;
+    _u16        MaxSleepTimeMs;   /* max sleep time in mSec For setting Long Sleep Interval policy use */
+    _u16        Reserved3;
+} SlWlanSetPmPolicyParams_t;
+
+typedef struct
+{
+    _u32        ScanInterval; /* Scan interval in seconds */
+    _u32        ScanPolicy;
+} SlWlanGetScanPolicyParams_t;
 
 /*****************************************************************************/
 /* Function prototypes                                                                       */
@@ -646,6 +668,8 @@ _i16 sl_WlanProfileAdd(const _i8*  pName,const  _i16 NameLen,const _u8 *pMacAddr
     \sa             sl_WlanProfileAdd , sl_WlanProfileDel       
     \note           belongs to \ref ext_api
     \warning     
+	
+
 */
 #if _SL_INCLUDE_FUNC(sl_WlanProfileGet)
 _i16 sl_WlanProfileGet(const _i16 Index,_i8*  pName, _i16 *pNameLen, _u8 *pMacAddr, SlSecParams_t* pSecParams, SlGetSecParamsExt_t* pSecExtParams, _u32 *pPriority);
@@ -719,8 +743,12 @@ _i16 sl_WlanProfileDel(const _i16 Index);
                     -  For setting low power management policy use: <b> sl_WlanPolicySet(SL_POLICY_PM , SL_LOW_POWER_POLICY, NULL,0) </b>
                     -  For setting always on power management policy use: <b> sl_WlanPolicySet(SL_POLICY_PM , SL_ALWAYS_ON_POLICY, NULL,0) </b>
                     -  For setting Long Sleep Interval policy use: \n
-                            _u16 PolicyBuff[4] = {0,0,800,0}; // PolicyBuff[2] is max sleep time in mSec \n<b>
-                            sl_WlanPolicySet(SL_POLICY_PM , SL_LONG_SLEEP_INTERVAL_POLICY, (_u8*)PolicyBuff,sizeof(PolicyBuff));  </b>\n
+					        SlWlanSetPmPolicyParams_t PmParamSet;
+							_u8 length;
+							memset(&PmParamSet,0,sizeof(PmParamSet));
+							PmParamSet.MaxSleepTimeMs = 800; //value is is max sleep time in mSec
+							length = sizeof(PmParamSet);
+                            status = sl_WlanPolicySet(SL_POLICY_PM, SL_LOW_LATENCY_POLICY, &PmParamSet, length);  </b>\n
      
     SL_POLICY_P2P defines p2p negotiation policy parameters for P2P role:
                     - To set intent negotiation value, set on of the following:
@@ -756,6 +784,40 @@ _i16 sl_WlanPolicySet(const _u8 Type , const _u8 Policy, _u8 *pVal,const _u8 Val
 
     \warning        The value pointed by the argument *pValLen should be set to a value different from 0 and 
                     greater than the buffer length returned from the SL device. Otherwise, an error will be returned.
+	\par    Examples:
+    \par   
+          <b> Get PM Policy: </b>
+    \code   
+	    SlWlanGetPmPolicyParams_t PmParamGet;
+		_u8 length;
+		length = sizeof(PmParamGet);
+		memset(&PmParamGet,0,sizeof(PmParamGet));
+		status = sl_WlanPolicyGet(SL_POLICY_PM, 0, (_u8 *)&PmParamGet, (_u8  *)&length);
+
+    \endcode
+    \par   
+           <b> Get Scan Policy: </b>
+    \code
+	    SlWlanGetScanPolicyParams_t ScanParamsGet;
+		_u8 length;
+        memset(&ScanParamsGet,0,sizeof(ScanParamsGet));    
+		length = sizeof(ScanParamsGet);
+		sl_WlanPolicyGet(SL_POLICY_SCAN, 0, (_u8 *)&ScanParamsGet, &length);
+    \endcode
+    \par   
+           <b> Get P2P Policy: </b>
+    \code   
+	    _u8 length;
+        length = sizeof(policy);
+		sl_WlanPolicyGet(SL_POLICY_P2P, 0, (_u8 *)&policy, &length);  
+    \endcode
+	\par   
+           <b> Get Connection Policy: </b>
+    \code   
+	    _u8 length;
+        length = sizeof(policy);
+		sl_WlanPolicyGet(SL_POLICY_CONNECTION, 0, (_u8 *)&policy, &length);
+    \endcode
 
 */
 #if _SL_INCLUDE_FUNC(sl_WlanPolicyGet)

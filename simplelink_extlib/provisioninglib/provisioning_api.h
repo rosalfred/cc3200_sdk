@@ -65,7 +65,7 @@
 #define sl_Provisioning_NOTIFY_HTTP_SERVER_EVENT    TRUE
 
 
-#define SL_EXT_PROVLIB_VERSION          "1.0.10.5"
+#define SL_EXT_PROVLIB_VERSION          "1.0.10.6"
 #define SL_EXT_PROVLIB_PRODUCT_VERSION  "R1.0"
 
 // Wait Forever

@@ -95,7 +95,8 @@ extern "C" {
 
 #if (SL_ERR_IN_PROGRESS_HANDLING == SL_HANDLING_ERROR)
 #define VERIFY_NO_ERROR_HANDLING_IN_PROGRESS() { \
-	    if ( g_bDeviceRestartIsRequired == (_u8)TRUE) return SL_API_ABORTED; }
+	    if ( g_bDeviceRestartIsRequired == (_u8)TRUE) return SL_API_ABORTED; } \
+		if ( SL_IS_COMMAND_ALLOWED != (_u8)TRUE) return SL_API_ABORTED; 
 #else
 #define VERIFY_NO_ERROR_HANDLING_IN_PROGRESS()
 #endif

@@ -112,8 +112,7 @@ static i32 buf_rd_remlen(u8 *buf, u32 *remlen)
                 val += (buf[i] & 0x7F) << mul;
                 mul += 7;
 
-        } while((buf[i++] & 0x80)       &&
-                (i < MAX_REMLEN_BYTES));
+        } while((buf[i++] & 0x80) && (i < MAX_REMLEN_BYTES));
 
         *remlen = val;
 
@@ -126,9 +125,8 @@ i32 mqp_buf_rd_remlen(u8 *buf, u32 *remlen)
         return buf_rd_remlen(buf, remlen);
 }
 
-i32
-mqp_pub_append_topic(struct mqtt_packet *mqp, const struct utf8_string *topic,
-                     u16 msg_id)
+i32 mqp_pub_append_topic(struct mqtt_packet *mqp,
+                         const struct utf8_string *topic, u16 msg_id)
 {
         u8 *buf = MQP_VHEADER_BUF(mqp), *ref = buf;
 
@@ -285,6 +283,9 @@ void secure_conn_struct_init(struct secure_conn *nw_security)
         nw_security->method = nw_security->cipher = NULL; 
         nw_security->files  = NULL;
         nw_security->n_file = 0;
+
+        nw_security->remote_dn_str = NULL;
+        nw_security->dev_listed_ca = false;
 
         return;
 }

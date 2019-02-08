@@ -46,7 +46,20 @@
 
 #include "platform.h"
 
-#define MQTT_COMMON_VERSTR "1.1.1" /**< Version of Common LIB */
+#ifndef CFG_MQTT_MALLOC
+#define MQTT_MALLOC malloc
+#else
+#define MQTT_MALLOC CFG_MQTT_MALLOC
+#endif
+
+#ifndef CFG_MQTT_FREE
+#define MQTT_FREE free
+#else
+#define MQTT_FREE CFG_MQTT_FREE
+#endif
+
+
+#define MQTT_COMMON_VERSTR "1.5.0" /**< Version of Common LIB */
 
 #define MIN(a, b) ((a > b)? b : a)
 
@@ -236,6 +249,7 @@ struct mqtt_packet {
 #define MQP_ERR_BADCALL   (-8)  /**< Irrelevant call for LIB state */
 #define MQP_ERR_CONTENT   (-9)  /**< MSG / Data content has errors */
 #define MQP_ERR_LIBQUIT  (-10)  /**< Needs reboot library has quit */
+#define MQP_ERR_REMLSTN  (-11)  /**< No remote listener for socket */
 
 
 #define MQP_ERR_NOT_DEF  (-32)  /**< Value other than defined ones */
@@ -496,6 +510,13 @@ struct secure_conn {
         void *cipher;  /**< Reference to information about cryptograph ciphers */
         u32   n_file;  /**< Count of secure connection related files, certs... */
         c8   **files;  /**< Reference to array of file-names used for security */
+
+        /** If not NULL, then verify remote server for specified domain name.  */
+        const c8 *remote_dn_str;       /* dn --> domain name */
+
+        /** Assert to check if (root) certificate authority of remote server is
+            present in the 'certificate store' i.e. vault maintained by device */
+        bool  dev_listed_ca; /* ca --> certificate authority */
 };
 
 /** @} */

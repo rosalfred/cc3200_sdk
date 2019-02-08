@@ -74,6 +74,8 @@ support backward sync pattern */
 #define ACT_DATA_SIZE(_ptr)   (((_SocketAddrResponse_u *)(_ptr))->IpV4.statusOrLen)
 
 
+_u16  g_SlDeviceStatus = 0;
+
 /* Internal function prototype declaration */
 
       
@@ -555,6 +557,8 @@ _SlReturnVal_t _SlDrvDriverCBDeinit(void)
 {
     _u8  Idx =0;
 
+	SL_UNSET_DEVICE_STARTED;
+
     /* Flow control de-init */
     g_pCB->FlowContCB.TxPoolCnt = 0;
     OSI_RET_OK_CHECK(sl_LockObjDelete(&g_pCB->FlowContCB.TxLockObj));
@@ -640,7 +644,6 @@ _SlReturnVal_t _SlDrvCmdOp(
     g_pCB->IsCmdRespWaited = TRUE;
 
     SL_TRACE0(DBG_MSG, MSG_312, "_SlDrvCmdOp: call _SlDrvMsgWrite");
-
 
     /* send the message */
     RetVal = _SlDrvMsgWrite(pCmdCtrl, pCmdExt, pTxRxDescBuff);
@@ -1291,6 +1294,7 @@ static void _SlAsyncEventGenericHandler(_u8 bInCmdContext)
 /* ******************************************************************************/
 static _SlReturnVal_t _SlDrvMsgReadCmdCtx(_u16 cmdOpcode)
 {
+	_SlReturnVal_t RetVal;
 #ifndef SL_TINY_EXT
 	_u16 CmdCmpltTimeout;
 
@@ -1311,9 +1315,15 @@ static _SlReturnVal_t _SlDrvMsgReadCmdCtx(_u16 cmdOpcode)
 #ifdef SL_TINY_EXT        
             VERIFY_RET_OK(_SlDrvMsgRead());
 #else
-            if (_SlDrvMsgRead() != SL_OS_RET_CODE_OK)
+			RetVal = _SlDrvMsgRead();
+
+            if (RetVal != SL_OS_RET_CODE_OK)
             {
-                SL_DRV_LOCK_GLOBAL_UNLOCK();
+				if (RetVal != SL_API_ABORTED)
+				{	
+                	SL_DRV_LOCK_GLOBAL_UNLOCK();
+				}
+					
                 return SL_API_ABORTED;
             }
 #endif            
@@ -1355,6 +1365,7 @@ static _SlReturnVal_t _SlDrvMsgReadCmdCtx(_u16 cmdOpcode)
 
             if (sl_SyncObjWait(&g_pCB->CmdSyncObj, CmdCmpltTimeout))
             {
+				g_pCB->IsCmdRespWaited = FALSE;
                 SL_DRV_LOCK_GLOBAL_UNLOCK();
                 _SlDriverHandleError(SL_DEVICE_DRIVER_TIMEOUT_CMD_COMPLETE, cmdOpcode, CmdCmpltTimeout);
                 return SL_API_ABORTED;
@@ -1384,6 +1395,8 @@ static _SlReturnVal_t _SlDrvMsgReadCmdCtx(_u16 cmdOpcode)
 /* ******************************************************************************/
 _SlReturnVal_t _SlDrvMsgReadSpawnCtx(void *pValue)
 {
+	_SlReturnVal_t RetVal;
+
 #ifdef SL_POLLING_MODE_USED
     _i16 retCode = OSI_OK;
     /*  for polling based systems */
@@ -1421,9 +1434,15 @@ _SlReturnVal_t _SlDrvMsgReadSpawnCtx(void *pValue)
 #ifdef SL_TINY_EXT
     VERIFY_RET_OK(_SlDrvMsgRead());
 #else
-	if (_SlDrvMsgRead() != SL_OS_RET_CODE_OK)
+	RetVal = _SlDrvMsgRead();
+
+	if (RetVal != SL_OS_RET_CODE_OK)
 	{
-        SL_DRV_LOCK_GLOBAL_UNLOCK();
+		if (RetVal != SL_API_ABORTED)
+		{
+            SL_DRV_LOCK_GLOBAL_UNLOCK();
+		}
+        
 		return SL_API_ABORTED;
 	}
 #endif
@@ -1572,6 +1591,7 @@ static _SlReturnVal_t _SlDrvRxHdrRead(_u8 *pBuf, _u8 *pAlignSize)
     _u8         ShiftIdx;
     _u8         TimeoutState = TIMEOUT_STATE_INIT_VAL;
     _u8         SearchSync = TRUE;
+	_u8         SyncPattern[4];
 
 
 #if (!defined (SL_TINY_EXT)) && (defined(sl_GetTimestamp))
@@ -1595,6 +1615,12 @@ static _SlReturnVal_t _SlDrvRxHdrRead(_u8 *pBuf, _u8 *pAlignSize)
     while ( *(_u32 *)&pBuf[0] == *(_u32 *)&pBuf[4])
     {
     	 NWP_IF_READ_CHECK(g_pCB->FD, &pBuf[4], 4);
+#if (!defined (SL_TINY)) && (defined(sl_GetTimestamp))
+		if (_SlDrvIsTimeoutExpired(&TimeoutInfo))
+		{
+			return SL_API_ABORTED;
+		}
+#endif
     }
 
 
@@ -1604,15 +1630,22 @@ static _SlReturnVal_t _SlDrvRxHdrRead(_u8 *pBuf, _u8 *pAlignSize)
     	/* scan till we get the real sync pattern */
 		for (ShiftIdx =0; ShiftIdx <=4 ; ShiftIdx++)
 		{
+
+		   /* copy to local variable to ensure starting address which is 4-bytes aligned */
+		   sl_Memcpy(&SyncPattern[0],  &pBuf[ShiftIdx], 4);
+
 		   /* sync pattern found so complete the read to  4 bytes aligned */
-		   if (N2H_SYNC_PATTERN_MATCH(&pBuf[ShiftIdx], g_pCB->TxSeqNum))
+		   if (N2H_SYNC_PATTERN_MATCH(&SyncPattern[0], g_pCB->TxSeqNum))
 		   {
 				   /* copy the bytes following the sync pattern to the buffer start */
-				   *(_u32 *)&pBuf[0] = *(_u32 *)&pBuf[ShiftIdx + SYNC_PATTERN_LEN];
+				   sl_Memcpy(&pBuf[0],  &pBuf[ShiftIdx + SYNC_PATTERN_LEN], 4);
 
-				  /* read the rest of the byte */
-				  NWP_IF_READ_CHECK(g_pCB->FD, &pBuf[SYNC_PATTERN_LEN - ShiftIdx], ShiftIdx);
-
+				   if (ShiftIdx != 0)
+				   {
+	   				  /* read the rest of the bytes if any (expected to complete the opcode + length fields ) */
+					  NWP_IF_READ_CHECK(g_pCB->FD, &pBuf[SYNC_PATTERN_LEN - ShiftIdx], ShiftIdx);
+				   }
+				  
 				  /* here we except to get the opcode + length or false doubled sync..*/
 				  SearchSync = FALSE;
 				  break;

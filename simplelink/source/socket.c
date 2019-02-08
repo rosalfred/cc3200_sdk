@@ -556,7 +556,7 @@ _i16 sl_Connect(_i16 sd, const SlSockAddr_t *addr, _i16 addrlen)
     {
 #ifndef SL_TINY_EXT    
     	/*In case socket is non-blocking one, the async event should be received immediately */
-    	if( g_pCB->SocketNonBlocking >> (sd & BSD_SOCKET_ID_MASK))
+    	if( g_pCB->SocketNonBlocking & (1<<(sd & BSD_SOCKET_ID_MASK) ))
 		{
     		SL_DRV_SYNC_OBJ_WAIT_TIMEOUT(&g_pCB->ObjPool[ObjIdx].SyncObj,
                                              SL_DRIVER_TIMEOUT_SHORT,

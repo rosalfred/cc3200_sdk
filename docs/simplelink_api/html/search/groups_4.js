@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['userevents',['UserEvents',['../group___user_events.html',1,'']]]
+  ['socket',['Socket',['../group__socket.html',1,'']]]
 ];

@@ -1,5 +1,5 @@
 ================================================================================
-CC3200 SDK v1.2.0 release
+CC3200 SDK v1.3.0 release
 ================================================================================
 
 The CC3200 SDK hosts building blocks viz. Peripheral Drivers,  SimpleLink Host,

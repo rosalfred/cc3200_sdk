@@ -263,11 +263,11 @@ extern "C"
 /*****************************************************************************/
 /* Macro declarations for Host Driver version                                */
 /*****************************************************************************/
-#define SL_DRIVER_VERSION   "1.0.1.6"
+#define SL_DRIVER_VERSION   "1.0.1.11"
 #define SL_MAJOR_VERSION_NUM    1L
 #define SL_MINOR_VERSION_NUM    0L
 #define SL_VERSION_NUM          1L
-#define SL_SUB_VERSION_NUM      6L
+#define SL_SUB_VERSION_NUM      11L
 
 
 /*****************************************************************************/
@@ -368,11 +368,6 @@ typedef _u8   _SlArgSize_t;
 typedef _i16   _SlDataSize_t;
 typedef _i16   _SlReturnVal_t;
 
-/*#ifdef    __cplusplus
-}
-#endif /*  __cplusplus */
-
-
 
 /*
  * This event status used to  block or continue the event propagation
@@ -443,8 +438,10 @@ typedef _i16   _SlReturnVal_t;
 #endif
 
 
-
+#ifndef __CONCAT
 #define __CONCAT(x,y)	x ## y
+#endif
+
 #define __CONCAT2(x,y)	__CONCAT(x,y)
 
 

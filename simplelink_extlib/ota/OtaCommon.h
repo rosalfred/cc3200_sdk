@@ -20,6 +20,7 @@ extern "C" {
 #endif
 
 /* #define TI_OTA_SERVER */
+#define OTA_DROPBOX_V2
 
 /* General return values */
 #define OTA_STATUS_OK        0

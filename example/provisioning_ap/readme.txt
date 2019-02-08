@@ -1,1 +1,0 @@
-This folder is just a place holder. This application will be released as an add-on later.	

@@ -18,6 +18,16 @@
 #include "OtaClient.h"
 #include "OtaHttp.h"
 
+#ifdef OTA_DROPBOX_V2
+	#define JSON_FILE_SIZE      "size"
+	#define JSON_FILE_NAME      "path_display"
+	#define JSON_FILE_URL       "link"
+#else
+	#define JSON_FILE_SIZE      "bytes"
+	#define JSON_FILE_NAME      "path"
+	#define JSON_FILE_URL       "url"
+#endif
+
 static _u8 send_buf[HTTP_SEND_BUF_LEN];
 static _u8 recv_buf[HTTP_RECV_BUF_LEN];
 
@@ -207,12 +217,12 @@ _i32 json_parse_dropbox_media_url(_u8 *media_response_buf, _u8 *media_url)
     if (pBuf == NULL)
         return OTA_STATUS_ERROR;
 
-    pBuf = (_u8 *)strstr((const char *)pBuf, "url");
+    pBuf = (_u8 *)strstr((const char *)pBuf, JSON_FILE_URL);
     if (pBuf == NULL)
         return OTA_STATUS_ERROR;
 
-    pBuf += 7;
-    len = strstr((const char *)pBuf, "\", ") - (char *)pBuf; /* ends with ", */
+    pBuf += (strlen(JSON_FILE_URL)+4);
+    len = strstr((const char *)pBuf, "\"") - (char *)pBuf; /* ends with ", */
     if (len <= 0)
         return OTA_STATUS_ERROR;
 
@@ -288,11 +298,11 @@ _i32 json_parse_dropbox_metadata(_i16 sockId, RsrcData_t *pRsrcData, _u8 *read_b
         pRecord = pBuf;
 
         /* extract file size */
-        pBuf = (_u8 *)strstr((const char *)pRecord, "bytes"); /* start of directory files */
+        pBuf = (_u8 *)strstr((const char *)pRecord, JSON_FILE_SIZE); /* start of directory files */
         if (pBuf == NULL)
             return OTA_STATUS_ERROR;
 
-        pBuf += 8;
+        pBuf += (strlen(JSON_FILE_SIZE) + 3 /*": */);
         len = strstr((const char *)pBuf, ",") - (char *)pBuf; /* end of size */
         if (len <= 0)
             return OTA_STATUS_ERROR;
@@ -302,11 +312,11 @@ _i32 json_parse_dropbox_metadata(_i16 sockId, RsrcData_t *pRsrcData, _u8 *read_b
         pBuf += len;
 
         /* extract file path */
-        pBuf = (_u8 *)strstr((const char *)pRecord, "path"); /* start of directory files */
+        pBuf = (_u8 *)strstr((const char *)pRecord, JSON_FILE_NAME); /* start of directory files */
         if (pBuf == NULL)
             return OTA_STATUS_ERROR;
 
-        pBuf += 8;
+        pBuf += (strlen(JSON_FILE_NAME) + 4 /*": "*/);
         len = strstr((const char *)pBuf, "\",") - (char *)pBuf; /* end of size */
         if (len <= 0)
             return OTA_STATUS_ERROR;

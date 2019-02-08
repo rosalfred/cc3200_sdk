@@ -171,6 +171,24 @@ i32 mqtt_server_pub_dispatch(void *ctx_cl, struct mqtt_packet *mqp, bool dup);
 i32 mqtt_server_pub_dispatch_locked(void *ctx_cl, struct mqtt_packet *mqp,
                                     bool dup);
 
+
+/** Pause the packet LIB server.
+    Post a message to the server context to close all the network sockets
+    and relinquish the server run.
+
+    This API is not multi-task safe. 
+
+    @return 0 on success otherwise -1 on error.
+
+*/
+i32 mqtt_server_pause(void);
+
+/** Pause the packet LIB server (multi-task safe).
+
+    Refer to @ref mqtt_server_pause for other details.
+*/
+i32 mqtt_server_pause_locked(void);
+
 /** Run the server packet LIB for the specified wait time.
     This routine yields the control back to the application after the specified
     duration of wait time. Such an arrangement enable the application to make
@@ -393,6 +411,7 @@ struct mqtt_server_lib_cfg {
         i32  (*debug_printf)(const c8 *format, ...);  /**< Debug, mandatory */
         bool   aux_debug_en;  /**< Assert to indicate additional debug info */
 
+        struct secure_conn *nw_security; /**< Refer to @ref mqtt_netsec_grp */
 };
 
 /** Initialize the MQTT Server Packet library

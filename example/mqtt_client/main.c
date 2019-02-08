@@ -222,7 +222,7 @@ connect_config usr_connect_config[] =
 
 /* library configuration */
 SlMqttClientLibCfg_t Mqtt_Client={
-    1882,
+    0,
     TASK_PRIORITY,
     30,
     true,

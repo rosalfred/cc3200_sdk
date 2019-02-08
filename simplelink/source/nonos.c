@@ -65,7 +65,7 @@ _SlNonOsRetVal_t _SlNonOsSemGet(_SlNonOsSemObj_t* pSyncObj, _SlNonOsSemObj_t Wai
 #endif
 
 	 /* If timeout 0 configured, just detect the value and return */
-      if ((Timeout ==0) && (WaitValue == *pSyncObj))
+      if ((Timeout ==0) && (WaitValue == *((volatile _u8 *)pSyncObj)) )
 	  {
 		  *pSyncObj = SetValue;
 		  return NONOS_RET_OK;
@@ -83,7 +83,7 @@ _SlNonOsRetVal_t _SlNonOsSemGet(_SlNonOsSemObj_t* pSyncObj, _SlNonOsSemObj_t Wai
 #endif
     while (Timeout>0)
     {
-        if (WaitValue == *pSyncObj)
+        if (WaitValue == *((volatile _u8 *)pSyncObj))
         {
             *pSyncObj = SetValue;
             break;
@@ -113,7 +113,7 @@ _SlNonOsRetVal_t _SlNonOsSemGet(_SlNonOsSemObj_t* pSyncObj, _SlNonOsSemObj_t Wai
 #ifdef _SlSyncWaitLoopCallback
         if( (__NON_OS_SYNC_OBJ_SIGNAL_VALUE == WaitValue) && (timeOutRequest != NONOS_NO_WAIT) )
         {
-            if (WaitValue == *pSyncObj)
+            if (WaitValue == *((volatile _u8 *)pSyncObj))
             {
                 *pSyncObj = SetValue;
                 break;

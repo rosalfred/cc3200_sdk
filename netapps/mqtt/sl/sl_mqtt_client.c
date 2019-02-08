@@ -14,11 +14,12 @@
 ******************************************************************************/
 
 #include "sl_mqtt_client.h"
-#include "cc31xx_sl_net.h"
+#include "mqtt_client.h"
+#include "cc32xx_sl_net.h"
 #include "osi.h"
 
 #ifndef CFG_SL_CL_BUF_LEN
-#define BUF_LEN          1024 /*Buffer length*/
+#define BUF_LEN          2048 /*Buffer length*/
 #else
 #define BUF_LEN          CFG_SL_CL_BUF_LEN
 #endif
@@ -102,6 +103,13 @@ static _SlLockObj_t mt_lock;    /* Multi-task Lock */
 #define MT_LOCK_TAKE()   sl_LockObjLock(&mt_lock, OSI_WAIT_FOREVER);
 #define MT_LOCK_GIVE()   sl_LockObjUnlock(&mt_lock);
 
+#define SET_COND_AWAITED_ACK_LOCKED(client_ctx, cond, val) {      \
+                MT_LOCK_TAKE();                                   \
+                if(cond == client_ctx->awaited_ack)               \
+                        client_ctx->awaited_ack = val;            \
+                MT_LOCK_GIVE();                                   \
+        }
+
 /* MQTT Quality of Service */
 static _const enum mqtt_qos qos[] ={
         MQTT_QOS0,
@@ -135,19 +143,66 @@ struct device_net_services net = {
 #define ACK_RX_SIGNAL_WAIT(ack_sync_obj)     sl_SyncObjWait(ack_sync_obj,SL_OS_WAIT_FOREVER)    
 #define ACK_RX_SIGNAL_POST(ack_sync_obj)     sl_SyncObjSignal(ack_sync_obj)
 
-#define MT_GIVE_ACK_WAIT_MT_TAKE_RC(client_ctx, rc)                     \
-        {                                                               \
-                MT_LOCK_GIVE();                                 \
-                ACK_RX_SIGNAL_WAIT(&(client_ctx->ack_sync_obj));          \
-                MT_LOCK_TAKE();                                 \
-                rc = (MQTT_DISCONNECT == client_ctx->awaited_ack)? -1 : 0;    \
-        }
 
 #define STR2UTF_CONV(utf_s, str) {utf_s.buffer = (char *)str; utf_s.length = strlen(str);}
 
 /*Defining Event Messages*/
 #define MQTT_ACK "Ack Received from server"
 #define MQTT_ERROR "Connection Lost with broker"
+
+//*****************************************************************************
+// Wait for the response (callback) from the server (network)
+//*****************************************************************************
+_i32 _sl_ExtLib_ServerAckLockedWait(struct sl_client_ctx *client_ctx)
+{
+        _i32 rc = 0;
+
+        MT_LOCK_TAKE();
+        if(true == client_ctx->blocking_send) {
+                MT_LOCK_GIVE();
+                ACK_RX_SIGNAL_WAIT(&(client_ctx->ack_sync_obj));
+                MT_LOCK_TAKE();
+                rc = (MQTT_DISCONNECT == client_ctx->awaited_ack)?
+                      MQP_ERR_NOTCONN : 0;
+        }
+
+        MT_LOCK_GIVE();
+
+        return rc;
+}
+
+//*****************************************************************************
+// Set (unprotected) in the implementation the value of the ACK from the server 
+//*****************************************************************************
+bool _sl_ExtLib_AwaitedAckSet(struct sl_client_ctx *client_ctx, _u8 newAwaited)
+{
+        bool rc = false;
+
+        if(MQTT_DISCONNECT == client_ctx->awaited_ack)
+                goto _sl_ExtLib_AwaitedAckSetExit1;
+
+        client_ctx->awaited_ack = newAwaited;
+        rc = true;
+
+_sl_ExtLib_AwaitedAckSetExit1:
+
+        return rc;
+}
+
+//*****************************************************************************
+// Set (protected) in the implementation the value of the ACK from the server 
+//*****************************************************************************
+bool
+_sl_ExtLib_AwaitedAckLockedSet(struct sl_client_ctx *client_ctx, _u8 newAwaited)
+{
+        bool rc;
+
+        MT_LOCK_TAKE();
+        rc = _sl_ExtLib_AwaitedAckSet(client_ctx, newAwaited);
+        MT_LOCK_GIVE();
+
+        return rc;
+}
 
 //*****************************************************************************
 // process_notify_ack_cb 
@@ -209,7 +264,7 @@ process_notify_ack_cb(void *app, u8 msg_type, u16 msg_id, u8 *buf, u32 len)
 //*****************************************************************************
 static bool 
 process_publish_rx_cb(void *app, bool dup, enum mqtt_qos qos, bool retain, 
-                   struct mqtt_packet *mqp)
+                      struct mqtt_packet *mqp)
 {
         struct sl_client_ctx *client_ctx = (struct sl_client_ctx *)app;
 
@@ -223,7 +278,7 @@ process_publish_rx_cb(void *app, bool dup, enum mqtt_qos qos, bool retain,
 
         client_ctx->app_cbs.sl_ExtLib_MqttRecv(client_ctx->app_hndl,
                                (char _const*)MQP_PUB_TOP_BUF(mqp),
-                               MQP_PUB_TOP_LEN(mqp),MQP_PUB_PAY_BUF(mqp),
+                               MQP_PUB_TOP_LEN(mqp), MQP_PUB_PAY_BUF(mqp),
                                MQP_PUB_PAY_LEN(mqp), dup,
                                MQP_PUB_QOS(mqp), retain);
  process_publish_rx_cb_exit1:
@@ -240,12 +295,14 @@ static void process_disconn_cb(void *app, _i32 cause)
         struct sl_client_ctx *client_ctx = (struct sl_client_ctx *)app;
 
 		MT_LOCK_TAKE();
+
 		if(MQTT_DISCONNECT == client_ctx->awaited_ack) {
-				;   /* App is already aware - so do nothing */
-		} else if(client_ctx->awaited_ack != 0) {
+                ;
+        } else {
 				client_ctx->awaited_ack = MQTT_DISCONNECT;
 				ACK_RX_SIGNAL_POST(&client_ctx->ack_sync_obj);
 		}
+
 		client_ctx->app_cbs.sl_ExtLib_MqttDisconn(client_ctx->app_hndl);
 
 		MT_LOCK_GIVE();
@@ -366,6 +423,10 @@ void *sl_ExtLib_MqttClientCtxCreate(_const SlMqttClientCtxCfg_t *ctx_cfg,
                         ctx_cfg->server_info.n_files;
                 lib_ctx_cfg.nw_security->files = 
                         (char**)ctx_cfg->server_info.secure_files;
+                lib_ctx_cfg.nw_security->remote_dn_str =
+                        ctx_cfg->server_info.domain_name;
+                lib_ctx_cfg.nw_security->dev_listed_ca =
+                        ctx_cfg->server_info.dev_list_ca;
         }
         else {
                 lib_ctx_cfg.nw_security=NULL;
@@ -554,77 +615,93 @@ sl_ExtLib_MqttClientSet(void *app, _i32 param, _const void *value, _u32 len)
 _i32
 sl_ExtLib_MqttClientConnect(void *cli_ctx, bool clean, _u16 keep_alive_time)
 { 
-        _i32 ret = -1;
+        _i32 ret = MQP_ERR_NOTCONN;
         struct sl_client_ctx *client_ctx = (struct sl_client_ctx *)cli_ctx;
 
         /*utf8 strings into which client info will be stored*/
         struct utf8_string client_id, username, usr_pwd, will_topic, will_msg;
         struct utf8_string *usrname = NULL, *usrpasswd = NULL, *clientid=NULL;
 
-		MT_LOCK_TAKE();
+        SlMqttWill_t *mqtt_will = &client_ctx->mqtt_will;
 
-		if(MQTT_DISCONNECT != client_ctx->awaited_ack)
-				goto mqtt_connect_exit1;
+        MT_LOCK_TAKE();
+
+        if(MQTT_DISCONNECT != client_ctx->awaited_ack)
+                goto mqtt_connect_exit1;
 
         /* Provide Client ID,user name and password into MQTT Library */
         if(client_ctx->client_id != NULL) {
             STR2UTF_CONV(client_id, client_ctx->client_id);
             clientid = &client_id;
         }
-        
+
         if(client_ctx->usr_name != NULL) {
                 STR2UTF_CONV(username, client_ctx->usr_name);
                 usrname = &username;
         }
+
         if(client_ctx->usr_pwd != NULL) {
                 STR2UTF_CONV(usr_pwd, client_ctx->usr_pwd);
                 usrpasswd = &usr_pwd;
         }
+
         ret = mqtt_client_ctx_info_register(client_ctx->cli_hndl,
                                 clientid, usrname, usrpasswd);
         if(ret < 0) {
                 goto mqtt_connect_exit1;
         }
-        
+
         /* Register a will message, if specified, into MQTT Library */
         if(NULL != client_ctx->mqtt_will.will_topic ) {
-                STR2UTF_CONV(will_topic, client_ctx->mqtt_will.will_topic);
-                STR2UTF_CONV(will_msg, client_ctx->mqtt_will.will_msg);
+                STR2UTF_CONV(will_topic, mqtt_will->will_topic);
+                STR2UTF_CONV(will_msg,   mqtt_will->will_msg);
                 ret = mqtt_client_ctx_will_register(client_ctx->cli_hndl,
-                                        &will_topic, &will_msg,
-                                        qos[client_ctx->mqtt_will.will_qos],
-                                        client_ctx->mqtt_will.retain);
+                                                    &will_topic,   &will_msg,
+                                                    qos[mqtt_will->will_qos],
+                                                    mqtt_will->retain);
+        } else {
+                ret = mqtt_client_ctx_will_register(client_ctx->cli_hndl, NULL,
+                                                    NULL, MQTT_QOS0, false);
+
                 if(ret < 0) {
                         goto mqtt_connect_exit1;
                 }
         }
 
         client_ctx->conn_ack = 0;
+        client_ctx->awaited_ack  = MQTT_CONNACK;
+        MT_LOCK_GIVE();
 
         /* Connect to the server */
         ret = mqtt_connect_msg_send(client_ctx->cli_hndl, clean,
-                                keep_alive_time);
+                                    keep_alive_time);
         /*Network or Socket Error happens*/
         if(ret < 0) {
-                goto mqtt_connect_exit1;
+                SET_COND_AWAITED_ACK_LOCKED(client_ctx, MQTT_CONNACK,
+                                            MQTT_DISCONNECT);
+                goto mqtt_connect_exit2;
         }
 
+        MT_LOCK_TAKE();
         if(false == g_multi_srvr_conn) {
                 /* Unblock the receive task here */        
                 RX_TX_SIGNAL_POST();
         }
-        /* Wait for a CONNACK here */
-		client_ctx->awaited_ack  =      MQTT_CONNACK;
-		MT_GIVE_ACK_WAIT_MT_TAKE_RC(client_ctx, ret);
+        MT_LOCK_GIVE();
 
-		if(MQTT_DISCONNECT != client_ctx->awaited_ack)
-				ret = (_i32)client_ctx->conn_ack;
+        /* Wait for a CONNACK here */
+        ACK_RX_SIGNAL_WAIT(&(client_ctx->ack_sync_obj));
+
+        MT_LOCK_TAKE();
+        if(MQTT_DISCONNECT != client_ctx->awaited_ack)
+                ret = (_i32)client_ctx->conn_ack;
         
 mqtt_connect_exit1:
         client_ctx->conn_ack = 0;
         MT_LOCK_GIVE();
 
-        return (ret < 0)? -1: ret;
+mqtt_connect_exit2:
+        return ret;
 }
 
 //*****************************************************************************
@@ -634,25 +711,22 @@ _i32
 sl_ExtLib_MqttClientDisconnect(void *cli_ctx)
 {
         struct sl_client_ctx *client_ctx = (struct sl_client_ctx *)cli_ctx;
-        _i32 retval;
+        _i32 retval = MQP_ERR_NOTCONN;
 
-        if(!(mqtt_client_is_connected(client_ctx->cli_hndl)))
-				return -1;
+#define MQTT_DISCONNECT_CB  0xCB /* Custom define for implementation ease */
 
-		MT_LOCK_TAKE();
-
-        client_ctx->awaited_ack = MQTT_DISCONNECT;
+        if(_sl_ExtLib_AwaitedAckLockedSet(client_ctx,
+                                          MQTT_DISCONNECT_CB) == false)
+                goto mqtt_disconn_exit1; /* Already disconnected - quit */
 
         /* send the disconnect command. */
-        retval = mqtt_disconn_send(client_ctx->cli_hndl);
-        
+        retval = mqtt_disconn_send(client_ctx->cli_hndl);     
         if(retval >= 0) {
-				MT_GIVE_ACK_WAIT_MT_TAKE_RC(client_ctx, retval);
+                ACK_RX_SIGNAL_WAIT(&(client_ctx->ack_sync_obj));
         }
 
-		MT_LOCK_GIVE();
-
-        return (retval < 0)? -1: 0;
+ mqtt_disconn_exit1:
+        return (retval >= 0)? 0 : retval;
 }
 
 
@@ -665,7 +739,7 @@ sl_ExtLib_MqttClientSub(void *cli_ctx, char* _const *topics,
 {
 #define MAX_SIMULTANEOUS_SUB_TOPICS 4
 
-        _i32 ret = -1, i;
+        _i32 ret = MQP_ERR_FNPARAM, i;
 
         struct utf8_strqos qos_topics[MAX_SIMULTANEOUS_SUB_TOPICS];
         struct sl_client_ctx *client_ctx = (struct sl_client_ctx *)cli_ctx;
@@ -680,28 +754,28 @@ sl_ExtLib_MqttClientSub(void *cli_ctx, char* _const *topics,
                 qos_topics[i].length = strlen(topics[i]);
         }
 
-		MT_LOCK_TAKE();
+        ret = MQP_ERR_NOTCONN;
 
-		if(MQTT_DISCONNECT == client_ctx->awaited_ack)
-			goto mqtt_sub_exit2;
+        MT_LOCK_TAKE();
+        if(_sl_ExtLib_AwaitedAckSet(client_ctx, MQTT_SUBACK) == false) {
+                MT_LOCK_GIVE();
+                goto mqtt_sub_exit1;
+        }
+
+        client_ctx->suback_qos  = (char*)qos_level;
+        MT_LOCK_GIVE();
 
         /* Send the subscription MQTT message */
         ret = mqtt_sub_msg_send(client_ctx->cli_hndl, qos_topics, count);
         if(ret < 0) {
-				goto mqtt_sub_exit2;
+                SET_COND_AWAITED_ACK_LOCKED(client_ctx, MQTT_SUBACK, 0);
+                goto mqtt_sub_exit1;
         }
 
-        if(true == client_ctx->blocking_send) {
-				client_ctx->suback_qos  = (char*)qos_level;
-				client_ctx->awaited_ack = MQTT_SUBACK;
-				MT_GIVE_ACK_WAIT_MT_TAKE_RC(client_ctx, ret);
-        }
+        ret = _sl_ExtLib_ServerAckLockedWait(client_ctx);
 
-		mqtt_sub_exit2:
-		MT_LOCK_GIVE();
-
-		mqtt_sub_exit1:
-		return (ret < 0)? -1: 0;
+ mqtt_sub_exit1:
+        return (ret >= 0)? 0: ret;
 }
 
 
@@ -713,7 +787,7 @@ sl_ExtLib_MqttClientUnsub(void *cli_ctx, char* _const *topics, _i32 count)
 {
 #define MAX_SIMULTANEOUS_UNSUB_TOPICS 4
 
-        _i32 ret = -1, i;
+        _i32 ret = MQP_ERR_FNPARAM, i;
         struct utf8_string unsub_topics[MAX_SIMULTANEOUS_UNSUB_TOPICS];
         struct sl_client_ctx *client_ctx = (struct sl_client_ctx *)cli_ctx;
 
@@ -725,72 +799,64 @@ sl_ExtLib_MqttClientUnsub(void *cli_ctx, char* _const *topics, _i32 count)
                 STR2UTF_CONV(unsub_topics[i], topics[i]);
         }
 
-        MT_LOCK_TAKE();
+        ret = MQP_ERR_NOTCONN;
+        if(_sl_ExtLib_AwaitedAckLockedSet(client_ctx, MQTT_UNSUBACK) == false)
+                goto mqtt_unsub_exit1;
 
-        if(MQTT_DISCONNECT == client_ctx->awaited_ack)
-                goto mqtt_unsub_exit2;
-        
         /* Send the unsubscription MQTT message */
         ret = mqtt_unsub_msg_send(client_ctx->cli_hndl, unsub_topics, count);
         if(ret < 0) {
-                goto mqtt_unsub_exit2;
+                SET_COND_AWAITED_ACK_LOCKED(client_ctx, MQTT_UNSUBACK, 0);
+                goto mqtt_unsub_exit1;
         }
 
-        if(true == client_ctx->blocking_send) {
-                client_ctx->awaited_ack   =    MQTT_UNSUBACK;
-                MT_GIVE_ACK_WAIT_MT_TAKE_RC(client_ctx, ret);
-        }
-
- mqtt_unsub_exit2:
-        MT_LOCK_GIVE();
+        ret = _sl_ExtLib_ServerAckLockedWait(client_ctx);
 
  mqtt_unsub_exit1:
-        return (ret < 0)? -1: 0;
+        return (ret >= 0)? 0 : ret;
 }
 //*****************************************************************************
 // sl_ExtLib_MqttClientSend
 //*****************************************************************************
 _i32 
 sl_ExtLib_MqttClientSend(void *cli_ctx, _const char *topic,
-                          _const void *data, _i32 len, 
-                          char qos_level, bool retain)
+                         _const void *data, _i32 len, 
+                         _u8 qos_level, bool retain)
 {
-        _i32 ret = -1;
+        _i32 ret = MQP_ERR_FNPARAM;
         struct utf8_string topic_utf8;
         struct sl_client_ctx *client_ctx = (struct sl_client_ctx *)cli_ctx;
 
+        _u8 awaited_acks[] = {0 /* connected */, MQTT_PUBACK, MQTT_PUBCOMP};
+        _u8 awaited_ack;
+
+        if(len > BUF_LEN)
+                goto mqtt_pub_exit1;
+        
+        if(qos_level > 2)
+                goto mqtt_pub_exit1;
+
         STR2UTF_CONV(topic_utf8, topic);
 
-		MT_LOCK_TAKE();
+        awaited_ack = awaited_acks[qos_level];
+        ret = MQP_ERR_NOTCONN;
 
-		if(MQTT_DISCONNECT == client_ctx->awaited_ack)
-			goto mqtt_pub_exit1;
+        if(_sl_ExtLib_AwaitedAckLockedSet(client_ctx, awaited_ack) == false)
+                goto mqtt_pub_exit1;
 
         /*publish the message*/
         ret = mqtt_client_pub_msg_send(client_ctx->cli_hndl, &topic_utf8,
-                                        data, len,
-                                        qos[qos_level], retain);
+                                       data, len, qos[qos_level], retain);
         if(ret < 0) {
+                SET_COND_AWAITED_ACK_LOCKED(client_ctx, awaited_ack, 0);
                 goto mqtt_pub_exit1;
         }
 
-		if((MQTT_QOS0 == qos[qos_level])          ||
-				(false == client_ctx->blocking_send))
-				goto mqtt_pub_exit1;
+        if(qos_level)
+                ret = _sl_ExtLib_ServerAckLockedWait(client_ctx);
 
-		/*Set up all variables to receive an ACK for the message to be sent*/
-		if(MQTT_QOS1 == qos[qos_level]) {
-				client_ctx->awaited_ack =  MQTT_PUBACK;
-		} else if(MQTT_QOS2 == qos[qos_level]) {
-				client_ctx->awaited_ack = MQTT_PUBCOMP;
-		}
-
-	MT_GIVE_ACK_WAIT_MT_TAKE_RC(client_ctx, ret);
-
-	mqtt_pub_exit1:
-	MT_LOCK_GIVE();
-
-	return (ret < 0)? -1: 0;
+ mqtt_pub_exit1:
+	    return (ret >= 0)? 0 : ret;
 }
 
 

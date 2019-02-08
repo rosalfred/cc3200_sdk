@@ -501,6 +501,11 @@ MqttClientServer(void *pvParameters)
     sl_ExtLib_MqttServerInit( &Mqtt_Server,&server_callbacks);
 
 /******************************************************************************/
+/*    Activate the MQTT Server Network Resources                              */
+/******************************************************************************/
+    sl_ExtLib_MqttServerActivate();
+
+/******************************************************************************/
 /* Initialising Client and Subscribing to the Broker                          */
 /******************************************************************************/
 

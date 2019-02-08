@@ -74,7 +74,7 @@
 #define SPI_16BITS_BUG(pattern)     (_u32)((_u32)pattern & (_u32)0xFFFF7FFF)
 #define SPI_8BITS_BUG(pattern)      (_u32)((_u32)pattern & (_u32)0xFFFFFF7F)
 
-
+#define _SL_DRV_STATUS_BIT_DEVICE_STARTED         0x200
 
 typedef struct
 {

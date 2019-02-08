@@ -47,7 +47,7 @@ _i32 CdnClient_ConnectByUrl(void *pvCdnClient, OtaFileMetadata_t *pResourceMetad
 {
     CdnClient_t *pCdnClient = (CdnClient_t *)pvCdnClient;
     _u8 domain_name[64];
-    _u8 req_uri[128];
+    _u8 req_uri[512];
     _u8 *cdn_url = pResourceMetadata->cdn_url;
     _i32 status;
 

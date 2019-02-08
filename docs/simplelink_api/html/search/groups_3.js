@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['socket',['Socket',['../group__socket.html',1,'']]]
+  ['netapp',['Netapp',['../group__netapp.html',1,'']]],
+  ['netcfg',['Netcfg',['../group__netcfg.html',1,'']]]
 ];

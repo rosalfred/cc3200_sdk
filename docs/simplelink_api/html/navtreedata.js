@@ -1,6 +1,6 @@
 var NAVTREE =
 [
-  [ "CC32XX Simplelink Host Driver", "index.html", [
+  [ "SimpleLink CC3100/CC3200 Host Driver", "index.html", [
     [ "SimpleLink Driver", "index.html", null ],
     [ "Modules", "modules.html", "modules" ],
     [ "Data Structures", "annotated.html", [

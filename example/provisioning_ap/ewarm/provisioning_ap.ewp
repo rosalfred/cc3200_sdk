@@ -29,7 +29,7 @@
         </option>
         <option>
           <name>Variant</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
@@ -60,7 +60,7 @@
         </option>
         <option>
           <name>FPU</name>
-          <version>2</version>
+          <version>3</version>
           <state>0</state>
         </option>
         <option>
@@ -83,11 +83,11 @@
         </option>
         <option>
           <name>OGProductVersion</name>
-          <state>6.70.1.5793</state>
+          <state>7.20.1.7306</state>
         </option>
         <option>
           <name>OGLastSavedByProductVersion</name>
-          <state>7.20.1.7306</state>
+          <state>7.30.4.8186</state>
         </option>
         <option>
           <name>GeneralEnableMisra</name>
@@ -103,7 +103,7 @@
         </option>
         <option>
           <name>GenLowLevelInterface</name>
-          <state>0</state>
+          <state>1</state>
         </option>
         <option>
           <name>GEndianModeBE</name>
@@ -133,16 +133,16 @@
         </option>
         <option>
           <name>RTConfigPath2</name>
-          <state>$TOOLKIT_DIR$\inc/c\DLib_Config_Normal.h</state>
+          <state>$TOOLKIT_DIR$\INC\c\DLib_Config_Normal.h</state>
         </option>
         <option>
           <name>GFPUCoreSlave</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
           <name>GBECoreSlave</name>
-          <version>20</version>
+          <version>21</version>
           <state>39</state>
         </option>
         <option>
@@ -168,10 +168,7 @@
         <debug>0</debug>
         <option>
           <name>CCDefines</name>
-          <state>ewarm</state>  
-          <state>USE_FREERTOS</state>
-          <state>SL_PLATFORM_MULTI_THREADED</state>
-          <state>NOTERM</state>
+          <state>ewarm</state>
         </option>
         <option>
           <name>CCPreprocFile</name>
@@ -300,18 +297,15 @@
         </option>
         <option>
           <name>CCIncludePath2</name>
-          <state>$$PROJ_DIR$/../</state>
+          <state>$PROJ_DIR$</state>
+          <state>$PROJ_DIR$/../</state>
+          <state>$PROJ_DIR$/../../common/</state>
           <state>$PROJ_DIR$/../../../driverlib/</state>
           <state>$PROJ_DIR$/../../../inc/</state>
-          <state>$PROJ_DIR$/../../common/</state>
           <state>$PROJ_DIR$/../../../simplelink/</state>
-          <state>$PROJ_DIR$/../../../simplelink/Include/</state>
-          <state>$PROJ_DIR$/../../../simplelink/Source/</state>
-          <state>$PROJ_DIR$/../../../oslib/</state>
-          <state>$PROJ_DIR$/../../../third_party\FreeRTOS/</state>
-          <state>$PROJ_DIR$/../../../third_party/FreeRTOS/source/</state>
-          <state>$PROJ_DIR$/../../../third_party/FreeRTOS/source/include/</state>
-          <state>$PROJ_DIR$/../../../third_party/FreeRTOS/source/portable/IAR/ARM_CM4/</state>
+          <state>$PROJ_DIR$/../../../simplelink/source</state>
+          <state>$PROJ_DIR$/../../../simplelink/include</state>
+          <state>$PROJ_DIR$/../../../simplelink_extlib/provisioninglib</state>
         </option>
         <option>
           <name>CCStdIncCheck</name>
@@ -625,6 +619,7 @@
       <data>
         <extensions></extensions>
         <cmdline></cmdline>
+        <hasPrio>0</hasPrio>
       </data>
     </settings>
     <settings>
@@ -693,7 +688,6 @@
         </option>
         <option>
           <name>IlinkConfigDefines</name>
-          
           <state>CC3200_ES_1_2_1=0</state>
         </option>
         <option>
@@ -774,9 +768,9 @@
         </option>
         <option>
           <name>IlinkAdditionalLibs</name>
-          <state>$PROJ_DIR$/../../../simplelink/ewarm/OS/Exe/simplelink.a</state>
           <state>$PROJ_DIR$/../../../driverlib/ewarm/Release/Exe/driverlib.a</state>
-          <state>$PROJ_DIR$/../../../oslib/ewarm/free_rtos/Exe/free_rtos.a</state>
+          <state>$PROJ_DIR$/../../../simplelink/ewarm/NON_OS/Exe/simplelink.a</state>
+          <state>$PROJ_DIR$/../../../simplelink_extlib/provisioninglib/ewarm/Release/Exe/provisioninglib.a</state>
         </option>
         <option>
           <name>IlinkOverrideProgramEntryLabel</name>
@@ -879,7 +873,7 @@
         </option>
         <option>
           <name>IlinkOptInline</name>
-          <state>1</state>
+          <state>0</state>
         </option>
         <option>
           <name>IlinkOptExceptionsAllow</name>
@@ -961,10 +955,22 @@
     </settings>
   </configuration>
   <file>
-    <name>$PROJ_DIR$/../main.c</name>
+    <name>$PROJ_DIR$\..\..\common\gpio_if.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$/../../common/startup_ewarm.c</name>
+    <name>$PROJ_DIR$\..\main.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\..\pinmux.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\..\..\common\startup_ewarm.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\..\..\common\timer_if.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\..\..\common\uart_if.c</name>
   </file>
 </project>
 

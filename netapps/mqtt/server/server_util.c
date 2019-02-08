@@ -28,7 +28,7 @@ u16 mqp_new_id_server(void)
 
 static void my_pkt_free(struct mqtt_packet *mqp)
 {
-        my_free((void*) mqp);
+        MQTT_FREE((void*) mqp);
 }
 
 /*----------------------------------------------------------------------------
@@ -55,7 +55,7 @@ static struct mqtt_packet *server_mqp_alloc(u8 msg_type, u32 buf_sz, u8 offset)
                 return NULL;
         }
 
-        mqp = my_malloc(MQP_SERVER_TX_LEN);
+        mqp = MQTT_MALLOC(MQP_SERVER_TX_LEN);
         if(NULL != mqp) {
                 mqp_init(mqp, offset);
 

@@ -3,7 +3,6 @@
 	<name>provisioning_ap</name>
 	<comment></comment>
 	<projects>
-		<project>ti_rtos_config</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
@@ -27,9 +26,40 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>gpio_if.c</name>
+			<type>1</type>
+			<locationURI>CC3200_SDK_ROOT/example/common/gpio_if.c</locationURI>
+		</link>
+		<link>
 			<name>main.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/main.c</locationURI>
 		</link>
-	</linkedResources>	<variableList>		<variable>			<name>CC3200_SDK_ROOT</name>			<value>$%7BPARENT-3-PROJECT_LOC%7D</value>		</variable>	</variableList>
+		<link>
+			<name>pinmux.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/pinmux.c</locationURI>
+		</link>
+		<link>
+			<name>startup_ccs.c</name>
+			<type>1</type>
+			<locationURI>CC3200_SDK_ROOT/example/common/startup_ccs.c</locationURI>
+		</link>
+		<link>
+			<name>timer_if.c</name>
+			<type>1</type>
+			<locationURI>CC3200_SDK_ROOT/example/common/timer_if.c</locationURI>
+		</link>
+		<link>
+			<name>uart_if.c</name>
+			<type>1</type>
+			<locationURI>CC3200_SDK_ROOT/example/common/uart_if.c</locationURI>
+		</link>
+	</linkedResources>
+	<variableList>
+		<variable>
+			<name>CC3200_SDK_ROOT</name>
+			<value>$%7BPARENT-3-PROJECT_LOC%7D</value>
+		</variable>
+	</variableList>
 </projectDescription>

@@ -742,9 +742,15 @@ static struct topic_node *SUB_node_create(const c8 *topSUB, u8 qid, void *usr_cl
                 u8    j = 0;
                 u32 map = cl_bmap_get(usr_cl);
 
-                for(j = 0; j < 3; j++)
+                for(j = 0; j < 3; j++) {
                         /* Client: clear QOS of existing sub, if any */
-                        leaf->cl_map[j] &= ~map;
+                        u32 old_map = leaf->cl_map[j];
+                        u32 new_map = leaf->cl_map[j] &= ~map;
+                        if(new_map != old_map) {
+                                cl_sub_count_del(usr_cl);
+                                break;
+                        }
+                }
 
                 leaf->cl_map[qid] |= map;
 
@@ -1102,6 +1108,7 @@ static bool proc_sub_msg_rx(void *usr_cl, const struct utf8_strqos *qos_topics,
                         continue;
 
                 buf[len] = '\0';  /* Dirty trick, cheeky one */
+                USR_INFO("SUB TOPIC: %s\r\n", buf);
 
                 ack[i] = ('#' == buf[len - 1])? 
                         proc_sub_ml_wildcard(buf, len, qos, usr_cl) : 
@@ -1220,6 +1227,7 @@ static void node_data_set(struct topic_node *node, u8 *data,
         return;
 }
 
+
 static bool node_data_update(struct topic_node *node, bool drop_qid0,
                              const u8 *data_buf, u32 data_len, 
                              u8 qid, bool retain)
@@ -1230,22 +1238,24 @@ static bool node_data_update(struct topic_node *node, bool drop_qid0,
 
         u8 *data  = NULL;
 
-        if(node->my_dlen)
-                my_free(node->my_data);
-
-        /* Watch out for assignment in 'if' statement - avoid such smarts */
-        if((drop_qid0 && (0 == qid))                        ||
-           (data_buf  && !(data = my_malloc(data_len)))) {
-                node_data_set(node, NODE_DATA_RESET_PARAMS);
-        } else {
-
-                if(data)
-                        buf_wr_nbytes(data, data_buf, data_len);
-
-                node_data_set(node, data, data_len, qid, retain);
+        if(!(drop_qid0 && (0 == qid)) && data_buf) {
+                data = MQTT_MALLOC(data_len);
+                if(!data)
+                        return false;
         }
 
-        return ((!!data) ^ (!!data_len))? false : true; 
+        if(node->my_dlen)
+                MQTT_FREE(node->my_data);
+
+        if(data) {
+                buf_wr_nbytes(data, data_buf, data_len);
+                node_data_set(node, data, data_len, qid, retain);
+        } else {
+                /* Set stage to remove the retained node */
+                node_data_set(node, NODE_DATA_RESET_PARAMS);
+        }
+
+        return true;
 }
 
 static inline bool is_wildcard_char(c8 c)
@@ -1303,7 +1313,7 @@ static bool _proc_pub_msg_rx(void *usr_cl, const struct utf8_string *topic,
                              const u8 *data_buf, u32 data_len, u8 msg_id,
                              enum mqtt_qos qos, bool retain)
 {
-        i32 err = -1;
+        i32 err = -2;
 
         /* Prior to msg processing, chk for topic or buffer errors */
         if((pub_topic_read(topic,  work_buf,  WBUF_LEN) <= 0) ||
@@ -1311,11 +1321,16 @@ static bool _proc_pub_msg_rx(void *usr_cl, const struct utf8_string *topic,
                 goto _proc_pub_msg_rx_exit;
 
         /* If a valid MSG ID is specified for a QOS2 pkt, track it */
-        err = -2;
-        if((msg_id)           &&
-           (MQTT_QOS2 == qos) &&
-           (false == cl_mgmt_qos2_pub_rx_update(usr_cl, msg_id)))
-                goto _proc_pub_msg_rx_exit;
+        if(msg_id && (MQTT_QOS2 == qos)) {
+                /* Return value would be one of these: -1, 0 or  1.
+                 1: this is a new PUB message (ID), so  forward it,
+                 0: old ID, drop msg to ensure the "only once" QOS2
+                -1: report the error in registering the message ID
+                */
+                err = cl_mgmt_qos2_pub_rx_update(usr_cl, msg_id);
+                if(1 != err)
+                        goto _proc_pub_msg_rx_exit;
+        }
 
         /* Forward data to all subscribers of PUB topic in  server */
         proc_sub_tree_topPUB(work_buf, topic, data_buf,
@@ -1325,7 +1340,7 @@ static bool _proc_pub_msg_rx(void *usr_cl, const struct utf8_string *topic,
         if(retain) {
                 struct topic_node *leaf = topic_node_create(work_buf);
                 if((NULL  == leaf) ||
-                   (false == node_data_update(leaf, true, data_buf, data_len,
+                   (false == node_data_update(leaf, false, data_buf, data_len,
                                               QOS_VALUE(qos), retain)))
                         err = -3;   /* Resources no more available */
 
@@ -1336,7 +1351,7 @@ static bool _proc_pub_msg_rx(void *usr_cl, const struct utf8_string *topic,
  _proc_pub_msg_rx_exit:
         DBG_INFO("Processing of PUB message from %s (0x%08x) has %s (%d)\n\r",
                  usr_cl? "client" : "plugin", usr_cl? cl_bmap_get(usr_cl) : 0,
-                 err? "failed" : "succeeded", err);
+                 (err < 0)? "failed" : "succeeded", err);
 
         return (err < 0)? false : true;
 }
@@ -1542,11 +1557,12 @@ void on_cl_net_close_locked(void *usr_cl, bool due2err)
 
 static void on_connack_send(void *usr_cl, bool clean_session)
 {
+
+        cl_on_connack_send(usr_cl, clean_session);
+
         /* If asserted, then need to start w/ clean state */
         if(clean_session)
                 session_tree_delete(usr_cl);  
-
-        cl_on_connack_send(usr_cl, clean_session);
 
         return;
 }

@@ -46,6 +46,7 @@
 									<listOptionValue builtIn="false" value="&quot;${CC3200_SDK_ROOT}/third_party/FreeRTOS/source/&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${CC3200_SDK_ROOT}/third_party/FreeRTOS/source/portable/CCS/ARM_CM3&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${CC3200_SDK_ROOT}/netapps/mqtt/common/&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${CC3200_SDK_ROOT}/netapps/mqtt/platform/&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${CC3200_SDK_ROOT}/netapps/mqtt/server/&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${CC3200_SDK_ROOT}/netapps/mqtt/client/&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${CC3200_SDK_ROOT}/netapps/mqtt/include/&quot;"/>
