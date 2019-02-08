@@ -368,7 +368,7 @@ typedef _u8   _SlArgSize_t;
 typedef _i16   _SlDataSize_t;
 typedef _i16   _SlReturnVal_t;
 
-#ifdef    __cplusplus
+/*#ifdef    __cplusplus
 }
 #endif /*  __cplusplus */
 
