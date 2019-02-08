@@ -149,7 +149,7 @@ extern "C" {
 
     \warning        
 */
-#define SL_INC_STD_BSD_API_NAMING
+#undef SL_INC_STD_BSD_API_NAMING
 
 
 /*!
