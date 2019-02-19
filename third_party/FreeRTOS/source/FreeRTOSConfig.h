@@ -44,7 +44,7 @@
 #define configAPPLICATION_ALLOCATED_HEAP        1
 
 /* Hook function related definitions. */
-#define configUSE_IDLE_HOOK                     1
+#define configUSE_IDLE_HOOK                     0
 #define configUSE_TICK_HOOK                     0
 #define configCHECK_FOR_STACK_OVERFLOW          1
 #define configUSE_MALLOC_FAILED_HOOK            1
@@ -87,7 +87,7 @@
 #define INCLUDE_xTaskGetSchedulerState          1
 #define INCLUDE_xTaskGetCurrentTaskHandle       1
 #define INCLUDE_uxTaskGetStackHighWaterMark     0
-#define INCLUDE_xTaskGetIdleTaskHandle          0
+#define INCLUDE_xTaskGetIdleTaskHandle          1
 #define INCLUDE_eTaskGetState                   1
 #define INCLUDE_xEventGroupSetBitFromISR        1
 #define INCLUDE_xTimerPendFunctionCall          0
@@ -141,7 +141,7 @@ to exclude the API function. */
 //#define INCLUDE_uxTaskGetStackHighWaterMark		0
 //#define INCLUDE_xTaskGetSchedulerState			1
 #define INCLUDE_xTimerGetTimerDaemonTaskHandle	0
-#define INCLUDE_xTaskGetIdleTaskHandle			1
+//#define INCLUDE_xTaskGetIdleTaskHandle			1
 #define INCLUDE_pcTaskGetTaskName				1
 //#define INCLUDE_eTaskGetState					1
 #define INCLUDE_xSemaphoreGetMutexHolder		0
@@ -154,6 +154,9 @@ See http://www.FreeRTOS.org/RTOS-Cortex-M3-M4.html. */
 /* Use the Cortex-M3 optimised task selection rather than the generic C code
 version. */
 //#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
+
+#define configRECORD_STACK_HIGH_ADDRESS           1  /* 1: record stack high address for the debugger, 0: do not record stack high address */
+
 
 #ifdef __ICCARM__
     void vAssertCalled( const char *pcFile, unsigned long ulLine );
